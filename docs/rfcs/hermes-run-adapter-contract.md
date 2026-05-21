@@ -780,7 +780,7 @@ client/backend and explicit route selection.
 
 #### Slice 4c: Feature-flagged runner backend and restart/reattach harness
 
-Status as of PR #TBD: implementation proposed. The code adds a default-off
+Status as of PR #2696: implementation proposed. The code adds a default-off
 `runner-local` adapter selection point plus factory wiring for an injected runner
 client, while keeping live browser chat routes on the legacy backend. The
 restart/reattach harness remains synthetic/fake-runner based until a later slice
