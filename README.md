@@ -7,7 +7,7 @@
 >
 > **Letting an AI agent install & run this for you?** Point it at the canonical
 > entry: *"Retrieve and follow the instructions at
-> `https://raw.githubusercontent.com/<YOUR_FORK>/hermes-trading-webui/master/INSTALL_FOR_AGENTS.md`"* —
+> `https://raw.githubusercontent.com/singhvedant/hermes-trading-webui/master/INSTALL_FOR_AGENTS.md`"* —
 > or, if it already has the repo cloned, just have it read
 > [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). It covers pulling the skill,
 > bootstrapping the WebUI, and launching/stopping it on request.

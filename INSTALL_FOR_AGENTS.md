@@ -15,7 +15,7 @@ and the UI renders it live.
 **Canonical entry point** (what a human pastes to you to start a fresh install):
 
 > Retrieve and follow the instructions at:
-> `https://raw.githubusercontent.com/<YOUR_FORK>/hermes-trading-webui/master/INSTALL_FOR_AGENTS.md`
+> `https://raw.githubusercontent.com/singhvedant/hermes-trading-webui/master/INSTALL_FOR_AGENTS.md`
 
 ---
 
@@ -39,7 +39,7 @@ If you are already running inside a clone of this repo, skip to step 2.
 Otherwise:
 
 ```bash
-git clone https://github.com/<YOUR_FORK>/hermes-trading-webui.git hermes-trading-webui
+git clone https://github.com/singhvedant/hermes-trading-webui.git hermes-trading-webui
 cd hermes-trading-webui
 ```
 
