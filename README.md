@@ -1,5 +1,17 @@
 # Hermes Web UI
 
+> **Trading build.** This fork adds an interactive trading render layer — live
+> candlestick/line charts (with SMA/EMA/Bollinger/VWAP), sortable tables, quote
+> scorecards, allocation bars — driven by fenced ```hermes JSON blocks the agent
+> emits, plus a Bloomberg-terminal skin. See [`TRADING.md`](TRADING.md).
+>
+> **Letting an AI agent install & run this for you?** Point it at the canonical
+> entry: *"Retrieve and follow the instructions at
+> `https://raw.githubusercontent.com/<YOUR_FORK>/hermes-trading-webui/master/INSTALL_FOR_AGENTS.md`"* —
+> or, if it already has the repo cloned, just have it read
+> [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md). It covers pulling the skill,
+> bootstrapping the WebUI, and launching/stopping it on request.
+
 [Hermes Agent](https://hermes-agent.nousresearch.com/) is a sophisticated autonomous agent that lives on your server, accessed via a terminal or messaging apps, that remembers what it learns and gets more capable the longer it runs.
 
 Hermes WebUI is a lightweight, dark-themed web app interface in your browser for [Hermes Agent](https://hermes-agent.nousresearch.com/).

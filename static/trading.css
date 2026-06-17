@@ -1,0 +1,184 @@
+/* ──────────────────────────────────────────────────────────────────────────
+ * Hermes Trading Widgets — Bloomberg-terminal aesthetic
+ * Loaded after style.css. Drives the .tw-* widget components and ships a
+ * `terminal` skin (deep near-black, amber accent, tabular monospace numerics).
+ * ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --tw-mono: "Berkeley Mono", "JetBrains Mono", "SF Mono", ui-monospace, "Cascadia Code", Menlo, monospace;
+  --tw-up: #26a17b;
+  --tw-down: #e0524a;
+  --tw-flat: #8b93a7;
+  --tw-axis: #6b7280;
+  --tw-grid: rgba(127, 140, 160, 0.10);
+  --tw-panel: var(--surface, #14161c);
+  --tw-panel-2: var(--surface-2, #1a1d26);
+  --tw-border: var(--border, rgba(255, 255, 255, 0.08));
+  --tw-head: var(--muted, #9aa3b2);
+}
+.dark {
+  --tw-grid: rgba(180, 190, 210, 0.07);
+}
+
+/* ── Bloomberg terminal skin ───────────────────────────────────────────────
+ * Selected via the Skin picker / `/theme terminal`. Pairs best with Dark. */
+[data-skin="terminal"] {
+  --accent: #ffae00;
+  --accent-rgb: 255, 174, 0;
+  --tw-up: #19c37d;
+  --tw-down: #ff5c52;
+  --tw-axis: #7d8597;
+  --tw-grid: rgba(255, 174, 0, 0.06);
+}
+[data-skin="terminal"].dark,
+[data-skin="terminal"] {
+  --tw-panel: #0b0d12;
+  --tw-panel-2: #11141b;
+  --tw-border: rgba(255, 174, 0, 0.14);
+}
+
+/* ── widget container ── */
+.hermes-widget.tw {
+  display: block;
+  margin: 14px 0;
+  padding: 0;
+  background: var(--tw-panel);
+  border: 1px solid var(--tw-border);
+  border-radius: 10px;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+.hermes-widget.tw-error {
+  display: block;
+  margin: 12px 0;
+  padding: 10px 14px;
+  font-family: var(--tw-mono);
+  font-size: 12.5px;
+  color: var(--tw-down);
+  background: color-mix(in srgb, var(--tw-down) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tw-down) 30%, transparent);
+  border-radius: 8px;
+  white-space: pre-wrap;
+}
+.tw-loading {
+  padding: 24px;
+  text-align: center;
+  font-family: var(--tw-mono);
+  font-size: 12px;
+  color: var(--tw-head);
+  letter-spacing: 0.04em;
+}
+
+/* ── header ── */
+.tw-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--tw-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent);
+}
+.tw-title {
+  font-family: var(--tw-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text, #e6e9ef);
+}
+.tw-sub { font-size: 11px; color: var(--tw-head); letter-spacing: 0.02em; }
+.tw-body { padding: 4px; }
+.tw-chart .tw-body { padding: 4px 4px 2px; }
+
+/* ── legend ── */
+.tw-legend {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  padding: 6px 14px 12px;
+  font-family: var(--tw-mono); font-size: 11px; color: var(--tw-head);
+}
+.tw-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.tw-legend-item i { width: 10px; height: 2px; border-radius: 1px; display: inline-block; }
+
+/* ── value semantics ── */
+.tw-up { color: var(--tw-up) !important; }
+.tw-down { color: var(--tw-down) !important; }
+.tw-flat { color: var(--tw-flat) !important; }
+
+/* ── table ── */
+.tw-table-wrap { overflow-x: auto; }
+.tw-table {
+  width: 100%; border-collapse: collapse;
+  font-family: var(--tw-mono); font-size: 12.5px;
+}
+.tw-table th {
+  position: sticky; top: 0;
+  text-align: left; padding: 9px 14px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--tw-head);
+  background: var(--tw-panel-2);
+  border-bottom: 1px solid var(--tw-border);
+  white-space: nowrap;
+}
+.tw-table th.tw-right { text-align: right; }
+.tw-table th.tw-sortable { cursor: pointer; user-select: none; }
+.tw-table th.tw-sortable:hover { color: var(--text, #e6e9ef); }
+.tw-table th[data-sort]::after { content: " ▲"; opacity: 0.7; }
+.tw-table th[data-sort="desc"]::after { content: " ▼"; }
+.tw-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tw-border) 55%, transparent);
+  color: var(--text, #d7dbe3);
+  white-space: nowrap;
+}
+.tw-table td.tw-right, .tw-table td.tw-num { text-align: right; }
+.tw-table tbody tr:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.tw-table tbody tr:last-child td { border-bottom: none; }
+.tw-cell-bar { position: relative; }
+.tw-cell-bar .tw-bar-fill {
+  position: absolute; left: 0; top: 4px; bottom: 4px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 3px; z-index: 0;
+}
+.tw-cell-bar .tw-bar-lbl { position: relative; z-index: 1; }
+
+/* ── quote scorecard ── */
+.tw-quote { padding: 16px 18px; }
+.tw-q-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.tw-q-id { display: flex; flex-direction: column; gap: 2px; }
+.tw-q-sym { font-family: var(--tw-mono); font-size: 20px; font-weight: 700; letter-spacing: 0.04em; color: var(--text, #e6e9ef); }
+.tw-q-name { font-size: 12px; color: var(--tw-head); }
+.tw-q-px { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.tw-q-price { font-family: var(--tw-mono); font-size: 26px; font-weight: 700; line-height: 1; }
+.tw-q-chg { font-family: var(--tw-mono); font-size: 13px; font-weight: 600; }
+.tw-q-stats {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 1px; margin-top: 16px;
+  background: var(--tw-border); border: 1px solid var(--tw-border); border-radius: 8px; overflow: hidden;
+}
+.tw-q-stat { display: flex; flex-direction: column; gap: 3px; padding: 9px 12px; background: var(--tw-panel); }
+.tw-q-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tw-head); }
+.tw-q-val { font-family: var(--tw-mono); font-size: 13.5px; font-weight: 600; color: var(--text, #e6e9ef); }
+
+/* ── metrics row ── */
+.tw-metrics { display: flex; flex-wrap: wrap; gap: 1px; background: var(--tw-border); }
+.tw-metric { flex: 1 1 140px; display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: var(--tw-panel); }
+.tw-m-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tw-head); }
+.tw-m-val { font-family: var(--tw-mono); font-size: 22px; font-weight: 700; color: var(--text, #e6e9ef); line-height: 1.05; }
+.tw-m-delta { font-family: var(--tw-mono); font-size: 12px; font-weight: 600; }
+
+/* ── bars / allocation ── */
+.tw-bars-list { display: flex; flex-direction: column; gap: 9px; padding: 12px 16px 14px; }
+.tw-bar-row { display: grid; grid-template-columns: minmax(70px, 26%) 1fr auto; align-items: center; gap: 12px; }
+.tw-bar-label { font-size: 12px; color: var(--text, #d7dbe3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-bar-track { height: 14px; background: var(--tw-panel-2); border-radius: 4px; overflow: hidden; }
+.tw-bar-bar { display: block; height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+.tw-bar-value { font-family: var(--tw-mono); font-size: 12px; font-weight: 600; color: var(--tw-head); text-align: right; min-width: 56px; }
+
+/* keep lightweight-charts attribution unobtrusive but present (license) */
+.hermes-widget .tv-lightweight-charts a { color: var(--tw-head) !important; }
+
+@media (max-width: 600px) {
+  .tw-q-price { font-size: 22px; }
+  .tw-q-sym { font-size: 17px; }
+  .tw-bar-row { grid-template-columns: minmax(60px, 30%) 1fr auto; }
+}

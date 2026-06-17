@@ -1,0 +1,82 @@
+<!doctype html>
+<html class="dark" data-skin="terminal" lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes Trading Widgets — demo</title>
+<style>
+  :root { --surface:#14161c; --surface-2:#1a1d26; --border:rgba(255,255,255,.08);
+          --text:#e6e9ef; --muted:#9aa3b2; --accent:#ffae00; }
+  body { margin:0; background:#07080b; color:var(--text);
+         font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         padding:28px; max-width:860px; margin:0 auto; }
+  h1 { font-size:15px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent);
+       font-family:ui-monospace,monospace; }
+  p.note { color:var(--muted); font-size:13px; }
+  h2 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+       margin-top:34px; border-top:1px solid var(--border); padding-top:16px; }
+</style>
+<link rel="stylesheet" href="static/trading.css">
+</head>
+<body>
+<h1>Hermes Trading Widgets</h1>
+<p class="note">Standalone render check — real trading.js + trading.css, terminal skin.</p>
+
+<h2>metrics</h2>      <div class="hermes-widget" data-spec="metrics"></div>
+<h2>quote</h2>        <div class="hermes-widget" data-spec="quote"></div>
+<h2>candlestick</h2>  <div class="hermes-widget" data-spec="candles"></div>
+<h2>line</h2>         <div class="hermes-widget" data-spec="line"></div>
+<h2>table</h2>        <div class="hermes-widget" data-spec="table"></div>
+<h2>bars</h2>         <div class="hermes-widget" data-spec="bars"></div>
+
+<script src="static/trading.js"></script>
+<script>
+  function walk(n, start){
+    var out=[], px=start, day=new Date('2026-01-01');
+    for(var i=0;i<n;i++){
+      var o=px, c=px*(1+(Math.random()-0.48)*0.03);
+      var hi=Math.max(o,c)*(1+Math.random()*0.012), lo=Math.min(o,c)*(1-Math.random()*0.012);
+      out.push({time:day.toISOString().slice(0,10),open:+o.toFixed(2),high:+hi.toFixed(2),
+                low:+lo.toFixed(2),close:+c.toFixed(2),volume:Math.round(2e6+Math.random()*6e6)});
+      px=c; day=new Date(day.getTime()+86400000);
+    }
+    return out;
+  }
+  var candles=walk(90,2800);
+  var line1=candles.map(function(d){return {time:d.time,value:d.close};});
+
+  var SPECS={
+    metrics:{type:"metrics",items:[
+      {label:"Net Worth",value:"₹12.4L",delta:2.1},{label:"Day P&L",value:"+₹3,200",delta:1.4},
+      {label:"Invested",value:"₹10.0L"},{label:"XIRR",value:"18.6%",delta:-0.3}]},
+    quote:{type:"quote",symbol:"RELIANCE",name:"Reliance Industries",currency:"₹",
+      price:2890.5,change:34.2,changePct:1.2,
+      stats:[{label:"Open",value:"2860"},{label:"Day High",value:"2899"},
+             {label:"Day Low",value:"2841"},{label:"Vol",value:"4.2M"},{label:"P/E",value:"24.1"}]},
+    candles:{type:"candlestick",title:"RELIANCE · 1D",symbol:"RELIANCE",volume:true,data:candles,
+      indicators:[{type:"sma",period:30,label:"SMA 30"},{type:"ema",period:9,label:"EMA 9"},
+                  {type:"bbands",period:20,mult:2}]},
+    line:{type:"line",title:"NIFTY — Close vs 30D MA",series:[
+      {name:"Close",data:line1},
+      {name:"MA 30",color:"#f5a623",data:line1.map(function(d,i){
+        var s=Math.max(0,i-29),sum=0,n=0;for(var j=s;j<=i;j++){sum+=line1[j].value;n++;}
+        return {time:d.time,value:+(sum/n).toFixed(2)};})}]},
+    table:{type:"table",title:"Holdings",columns:[
+      {key:"sym",label:"Symbol"},{key:"qty",label:"Qty",numeric:true,decimals:0},
+      {key:"ltp",label:"LTP",numeric:true,prefix:"₹"},
+      {key:"pnl",label:"P&L",numeric:true,delta:true,prefix:"₹"},
+      {key:"wt",label:"Weight",numeric:true,suffix:"%",bar:true}],
+      rows:[{sym:"RELIANCE",qty:10,ltp:2890.5,pnl:1234.5,wt:32},
+            {sym:"TCS",qty:5,ltp:3920,pnl:-410,wt:18},
+            {sym:"HDFCBANK",qty:20,ltp:1680.25,pnl:2890,wt:28},
+            {sym:"INFY",qty:15,ltp:1545,pnl:-120.5,wt:22}]},
+    bars:{type:"bars",title:"Sector Allocation",suffix:"%",data:[
+      {label:"IT",value:32},{label:"Banking",value:28},{label:"Energy",value:21},{label:"FMCG",value:19}]}
+  };
+  document.querySelectorAll('.hermes-widget').forEach(function(el){
+    el.textContent=JSON.stringify(SPECS[el.getAttribute('data-spec')]);
+  });
+  renderHermesWidgets(document);
+</script>
+</body>
+</html>

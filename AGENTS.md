@@ -25,6 +25,16 @@ For architecture, testing, or setup work, also read the matching reference:
 For UI or UX work, read `docs/UIUX-GUIDE.md` and `DESIGN.md` before
 changing layout, interaction flow, themes, chat rendering, or composer chrome.
 
+## Installing & operating this WebUI for a user
+
+If the human asks you to install, set up, launch, or stop the Hermes Trading
+Web UI (including pulling the `trading-widgets` skill), read and follow
+[`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md) — it is the canonical,
+step-by-step, idempotent lifecycle guide written for agents. Use `./ctl.sh`
+(`start`/`stop`/`restart`/`status`/`logs`) as the launch/stop path so stops are
+deterministic. The trading render layer is documented in [`TRADING.md`](TRADING.md);
+the widget contract the agent emits is `skills/trading-widgets/SKILL.md`.
+
 ## Onboarding and reinstall support
 
 If the task involves install, reinstall, bootstrap, first-run onboarding,

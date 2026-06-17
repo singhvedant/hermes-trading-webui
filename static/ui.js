@@ -4429,6 +4429,11 @@ function renderMd(raw){
     if(lang==='mermaid'&&!looksLikeLineNumberedToolOutput&&looksLikeMermaidStart){
       const id='mermaid-'+Math.random().toString(36).slice(2,10);
       _preBlock_stash.push(`<div class="mermaid-block" data-mermaid-id="${id}">${esc(code.trim())}</div>`);
+    } else if(lang==='hermes'&&!looksLikeLineNumberedToolOutput){
+      // Trading widget: the body is a JSON spec rendered by renderHermesWidgets()
+      // (static/trading.js) after DOM insertion. JSON is carried as escaped
+      // textContent so nothing in the spec can become live markup.
+      _preBlock_stash.push(`<div class="hermes-widget">${esc(code.trim())}</div>`);
     } else {
       const h=lang?`<div class="pre-header">${esc(lang)}</div>`:'';
       const langAttr=lang?` class="language-${esc(lang)}"`:'';
@@ -4822,7 +4827,7 @@ function renderMd(raw){
       return `<span${_cls(a.class,['task-done','task-todo','katex-inline'])}${a['data-katex']==='inline'?' data-katex="inline"':''}>`;
     }
     if(name==='div'){
-      const cls=_cls(a.class,['pre-header','mermaid-block','katex-block']);
+      const cls=_cls(a.class,['pre-header','mermaid-block','katex-block','hermes-widget']);
       const mermaid=a['data-mermaid-id']?` data-mermaid-id="${esc(a['data-mermaid-id'])}"`:'';
       const katex=a['data-katex']==='display'?' data-katex="display"':'';
       return `<div${cls}${mermaid}${katex}>`;
@@ -4887,7 +4892,7 @@ function renderMd(raw){
   // fix targeted the wrong layer (Prism token white-space) — by the time it
   // ran, the \n had already been replaced. The CSS rule is kept as defense
   // in depth.
-  s=s.replace(/(<div class="pre-header">[\s\S]*?<\/div>)?<pre[^>]*>[\s\S]*?<\/pre>|<div class="(mermaid-block|katex-block)"[\s\S]*?<\/div>/g,m=>{
+  s=s.replace(/(<div class="pre-header">[\s\S]*?<\/div>)?<pre[^>]*>[\s\S]*?<\/pre>|<div class="(mermaid-block|katex-block|hermes-widget)"[\s\S]*?<\/div>/g,m=>{
     _pre_stash.push(m);
     return '\x00E'+(_pre_stash.length-1)+'\x00';
   });
@@ -12010,6 +12015,7 @@ function postProcessRenderedMessages(container) {
   renderMermaidBlocks(container);
   renderKatexBlocks(container);
   initTreeViews(container);
+  if(typeof renderHermesWidgets==='function') renderHermesWidgets(container);
 }
 
 function highlightCode(container) {
