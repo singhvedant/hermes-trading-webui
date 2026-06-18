@@ -1,0 +1,119 @@
+/* ──────────────────────────────────────────────────────────────────────────
+ * Hermes Web UI — Simplify layer
+ * ---------------------------------------------------------------------------
+ * Loaded LAST. A calm, roomy density pass over the app chrome: larger type,
+ * a focused reading column, more breathing room between messages, and quieter
+ * chips/borders so the interface reads simpler and less cluttered.
+ *
+ * Everything is gated on  html[data-density="comfortable"]  (set on by default
+ * in index.html). Flip to  data-density="compact"  to fall back to the stock
+ * dense layout with zero side effects — nothing here touches behavior, only
+ * size/spacing/weight. Big spacing changes are held back on narrow viewports.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+html[data-density="comfortable"] {
+  /* Type scale — one comfortable notch up across the board */
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --message-body-font-size: 16px;
+  --message-body-line-height: 1.8;
+  --message-code-font-size: 13.5px;
+  --message-pre-code-font-size: 14px;
+  --message-table-font-size: 13.5px;
+  /* Softer corners read calmer */
+  --radius-card: 12px;
+  --radius-lg: 16px;
+}
+
+/* ── Focused reading column ──────────────────────────────────────────────
+ * Stock messages-inner is full-bleed. Cap and center it so long lines don't
+ * sprawl — the single biggest "less cluttered" win. Generous vertical room. */
+@media (min-width: 860px) {
+  html[data-density="comfortable"] .messages-inner {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 32px 32px 56px;
+  }
+}
+html[data-density="comfortable"] .messages-inner {
+  padding: 22px 20px 40px;
+}
+
+/* ── Message rhythm ── */
+html[data-density="comfortable"] .msg-row {
+  padding: 18px 0;
+}
+
+/* ── Sidebar: a touch wider, larger nav targets ── */
+@media (min-width: 860px) {
+  html[data-density="comfortable"] .sidebar {
+    width: 324px;
+  }
+}
+html[data-density="comfortable"] .sidebar-nav,
+html[data-density="comfortable"] .sidebar-search {
+  font-size: var(--font-size-md);
+}
+html[data-density="comfortable"] .sidebar-nav a,
+html[data-density="comfortable"] .sidebar-nav button,
+html[data-density="comfortable"] .sidebar-nav li {
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+/* ── Topbar: roomier, quieter divider ── */
+html[data-density="comfortable"] .topbar {
+  padding: 16px 24px;
+  border-bottom-color: color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+/* ── Composer: bigger touch targets, calmer chrome ── */
+html[data-density="comfortable"] .composer-box {
+  max-width: clamp(820px, 64vw, 1120px);
+  border-radius: 20px;
+}
+html[data-density="comfortable"] .composer-wrap {
+  padding: 16px 24px 20px;
+}
+html[data-density="comfortable"] .composer-footer {
+  gap: 14px;
+  padding: 8px 14px 14px;
+}
+
+/* ── Chips: larger and quieter ───────────────────────────────────────────
+ * The composer footer's many chips (model / profile / workspace / reasoning /
+ * toolsets) are the densest clutter. Enlarge them and drop the hard borders;
+ * a soft fill is enough to read them as one calm row. Borders return on hover
+ * so affordance is preserved. */
+html[data-density="comfortable"] .chip,
+html[data-density="comfortable"] .composer-model-chip,
+html[data-density="comfortable"] .composer-profile-chip,
+html[data-density="comfortable"] .composer-workspace-chip,
+html[data-density="comfortable"] .composer-reasoning-chip,
+html[data-density="comfortable"] .composer-toolsets-chip {
+  font-size: 12.5px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+}
+html[data-density="comfortable"] .composer-model-chip:hover,
+html[data-density="comfortable"] .composer-profile-chip:hover,
+html[data-density="comfortable"] .composer-workspace-chip:hover,
+html[data-density="comfortable"] .composer-reasoning-chip:hover,
+html[data-density="comfortable"] .composer-toolsets-chip:hover,
+html[data-density="comfortable"] .chip:hover {
+  border-color: var(--border2);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* ── Trading widgets: scale up to match the calmer chrome ── */
+html[data-density="comfortable"] .hermes-widget.tw { margin: 20px 0; }
+html[data-density="comfortable"] .tw-table { font-size: 13.5px; }
+html[data-density="comfortable"] .tw-table td { padding: 11px 16px; }
+html[data-density="comfortable"] .tw-table th { padding: 11px 16px; font-size: 11px; }
+html[data-density="comfortable"] .tw-q-price { font-size: 30px; }
+html[data-density="comfortable"] .tw-q-sym { font-size: 22px; }
+html[data-density="comfortable"] .tw-m-val { font-size: 25px; }
+html[data-density="comfortable"] .tw-title { font-size: 13px; }
