@@ -22,9 +22,13 @@
 
 /* ── Bloomberg terminal skin ───────────────────────────────────────────────
  * Selected via the Skin picker / `/theme terminal`. Pairs best with Dark. */
-[data-skin="terminal"] {
+:root[data-skin="terminal"] {
   --accent: #ffae00;
   --accent-rgb: 255, 174, 0;
+  --accent-hover: #e09a00;
+  --accent-bg: rgba(255, 174, 0, 0.10);
+  --accent-bg-strong: rgba(255, 174, 0, 0.18);
+  --accent-text: #ffbf3a;
   --tw-up: #19c37d;
   --tw-down: #ff5c52;
   --tw-axis: #7d8597;
