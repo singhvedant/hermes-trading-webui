@@ -8,9 +8,16 @@
 This installs and operates the **Hermes Trading Web UI**: the standard
 [hermes-webui](https://github.com/nesquena/hermes-webui) plus a trading render
 layer (interactive candlestick/line charts, sortable tables, quote scorecards,
-allocation bars) and a `trading-widgets` skill that teaches the Hermes Agent to
-emit them. The agent stays text-only; it prints a fenced ```hermes JSON block
-and the UI renders it live.
+allocation bars) and **two skills** that teach the agent to drive it:
+`trading-widgets` (the rendering contract — emit a fenced ```hermes JSON block
+and the UI renders it live) and `webui-system-management` (start / stop /
+restart / update the server). The agent stays text-only.
+
+**Any agent can run this guide** — Hermes Agent, Claude Code, Codex, or any
+assistant that can run shell commands and keep persistent notes/memory.
+Wherever this file says "the agent", it means *you*. Steps that write to
+memory use Hermes's `memory` toolset if you are Hermes, or your equivalent
+persistent notes / MEMORY file otherwise.
 
 **Canonical entry point** (what a human pastes to you to start a fresh install):
 
@@ -47,25 +54,35 @@ cd hermes-trading-webui
 
 ---
 
-## 2. Install the `trading-widgets` skill into the Hermes Agent
+## 2. Install the skills into the agent
 
-The skill is the contract that makes the agent emit widgets. It must live in the
-Hermes Agent skills directory (default `~/.hermes/skills/`).
+The repo ships two skills under `skills/`. Install **all** of them into the
+agent skills directory (default `~/.hermes/skills/`) — copy every skill the repo
+provides so future additions are picked up by the same step:
 
 ```bash
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 mkdir -p "$HERMES_HOME/skills"
-cp -R skills/trading-widgets "$HERMES_HOME/skills/trading-widgets"
+for d in skills/*/; do
+  name="$(basename "$d")"
+  rm -rf "$HERMES_HOME/skills/$name"
+  cp -R "$d" "$HERMES_HOME/skills/$name"
+done
 ```
+
+This installs:
+- **`trading-widgets`** — the contract that makes you emit chart/table/quote widgets.
+- **`webui-system-management`** — how to start/stop/restart/update this UI server.
 
 **Verify:**
 ```bash
-test -f "$HERMES_HOME/skills/trading-widgets/SKILL.md" && echo "skill installed"
+ls "$HERMES_HOME/skills/trading-widgets/SKILL.md" "$HERMES_HOME/skills/webui-system-management/SKILL.md"
 ```
-> If the running agent uses a non-default skills path, install there instead.
-> You can confirm the path later in the WebUI (Settings → it lists discovered
-> skills) or from the agent's `config.yaml`. The `skills` toolset must be enabled
-> for the agent to load it (it is in the default toolset list).
+Keep **both enabled** in the UI's **Skills** panel (the layers icon in the left
+rail) — a skill toggled off there will not load into the agent. The `skills`
+toolset must be enabled for the agent (it is in the default toolset list).
+> If the running agent uses a non-default skills path, install there instead;
+> confirm the path in the Skills panel or the agent's `config.yaml`.
 
 ---
 
@@ -113,6 +130,20 @@ HERMES_WEBUI_HOST=0.0.0.0 HERMES_WEBUI_PORT=8787 ./ctl.sh start
 ```
 Report the bound URL to the human: `http://<host>:<port>` (default
 `http://127.0.0.1:8787`).
+
+**Remember the deployment (do this once).** Persist these facts to your memory
+so any future session can open / stop / restart the UI without rediscovering
+them — this is what makes you able to manage the server on request:
+
+- `WEBUI_REPO` — absolute path to this repo clone (run `pwd`)
+- `WEBUI_URL`  — `http://<host>:<port>` from the status output
+- management: `cd $WEBUI_REPO && ./ctl.sh start|stop|restart|status`
+
+> Hermes: write it with the `memory` toolset, e.g. a note
+> `webui: repo=<pwd> url=http://127.0.0.1:8787 manage via ./ctl.sh start|stop|restart`.
+> Other agents: write the same line to your persistent notes / MEMORY file.
+> The `webui-system-management` skill (installed in step 2) documents the full
+> operating procedure and how to re-derive the port if memory goes stale.
 
 ---
 
@@ -164,7 +195,33 @@ reference it with `"src":"path.json"`.
 
 ---
 
-## 8. Troubleshooting
+## 8. Keep the UI and skills updated
+
+When the user asks to "update the trading UI", or as periodic maintenance, pull
+the latest and **re-sync the skills** so your widget vocabulary stays current
+(an update may add new widget types or fix the contract):
+
+```bash
+cd "$WEBUI_REPO"          # the path you saved in memory (step 4)
+git pull origin master
+
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+for d in skills/*/; do
+  name="$(basename "$d")"
+  rm -rf "$HERMES_HOME/skills/$name"
+  cp -R "$d" "$HERMES_HOME/skills/$name"
+done
+
+./ctl.sh restart          # pick up server/template changes
+./ctl.sh status
+```
+Then re-read `skills/trading-widgets/SKILL.md` if it changed, and tell the user
+what's new (a `git log` summary since the last pull helps). The
+`webui-system-management` skill carries this same procedure for runtime use.
+
+---
+
+## 9. Troubleshooting
 
 - **`/health` unreachable after start** → `./ctl.sh logs --lines 200 --no-follow`; common causes are an incomplete provider setup (re-run step 3 onboarding) or a missing dependency.
 - **Port already in use** → another instance is bound. `./ctl.sh status`; if stale, `./ctl.sh stop` then `start`. To run a second instance, pick another port: `HERMES_WEBUI_PORT=8788 ./ctl.sh start`.
@@ -174,14 +231,15 @@ reference it with `"src":"path.json"`.
 
 ---
 
-## 9. Uninstall / clean stop
+## 10. Uninstall / clean stop
 
 ```bash
 ./ctl.sh stop
 rm -f "$HOME/.hermes/webui.pid" "$HOME/.hermes/webui.ctl.env"
-# optional: remove the skill
-rm -rf "${HERMES_HOME:-$HOME/.hermes}/skills/trading-widgets"
+# optional: remove the skills
+rm -rf "${HERMES_HOME:-$HOME/.hermes}/skills/trading-widgets" \
+       "${HERMES_HOME:-$HOME/.hermes}/skills/webui-system-management"
 ```
 
-That's the whole lifecycle: **install skill → bootstrap → `ctl.sh start` →
-operate → `ctl.sh stop`.**
+That's the whole lifecycle: **install skills → bootstrap → `ctl.sh start` →
+operate → update (`git pull` + re-sync skills) → `ctl.sh stop`.**

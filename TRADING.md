@@ -12,8 +12,15 @@ agent runtime; it's a render layer + a skill that teaches the agent the format.
 | `static/trading.js` | Widget engine. Parses ```hermes JSON specs and renders charts/tables/scorecards. Lazy-loads the chart lib. Computes indicators (SMA/EMA/Bollinger/VWAP/RSI) client-side. |
 | `static/trading.css` | Bloomberg-terminal aesthetic + the `terminal` skin (deep near-black, amber accent, green/red semantics, tabular monospace numerics). |
 | `static/vendor/lightweight-charts/` | TradingView Lightweight Charts (vendored, Apache-2.0, no build step). |
-| `skills/trading-widgets/SKILL.md` | The contract the agent reads: every widget type, fields, and copy-paste examples. Install into your Hermes agent's skills. |
+| `skills/trading-widgets/SKILL.md` | The contract the agent reads: every widget type, fields, and copy-paste examples. |
+| `skills/webui-system-management/SKILL.md` | Teaches any agent to start/stop/restart/update this UI server and remember where it lives. |
 | `trading-demo.html` | Standalone render check — open it to see all widgets with synthetic data. |
+
+> **Skills are visible & toggleable in the app:** the **Skills** panel (layers
+> icon, left rail) lists every installed skill by category with an enable/disable
+> switch — `trading-widgets` and `webui-system-management` appear there once
+> installed. Install both with the loop in
+> [`INSTALL_FOR_AGENTS.md`](INSTALL_FOR_AGENTS.md) step 2.
 
 ### Edits to existing files (all mirror the built-in mermaid pipeline)
 - `static/ui.js` — fence dispatcher emits a `.hermes-widget` placeholder for ```hermes blocks; sanitizer allowlists the class; paragraph-protection regex preserves it; `postProcessRenderedMessages()` calls `renderHermesWidgets()`.
