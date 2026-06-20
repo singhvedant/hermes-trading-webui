@@ -28,15 +28,29 @@ persistent notes / MEMORY file otherwise.
 
 ## 0. Preconditions
 
-- OS: Linux, macOS, or WSL2. **Native Windows is not supported by the bootstrap** — use WSL2.
-- `python3` (3.11+) and `git` on PATH.
+- OS: Linux, macOS, WSL2, or Windows native (see note below).
+- `python3` / `python` (3.11+) and `git` on PATH.
 - Network access (first run may download the Hermes Agent and Python deps).
 
-**Verify:**
+**Verify (Linux/macOS/WSL2):**
 ```bash
 python3 --version && git --version && uname -s
 ```
-If `python3` is missing, **ASK** the human to install Python 3.11+ before continuing.
+
+**Verify (Windows native cmd/PowerShell):**
+```cmd
+python --version && git --version
+```
+
+If Python is missing, **ASK** the human to install Python 3.11+ before continuing.
+
+### Windows native note
+
+WSL2 is the easiest path on Windows. If WSL2 is available, use it and follow
+the Linux steps throughout. If the agent is running in a native Windows Python
+environment (no WSL2), use the adapted steps marked **[Windows]** in steps 2–4
+below and skip `ctl.sh` entirely — it is a bash script and does not run on
+Windows. Everything else in the guide works unchanged.
 
 ---
 
@@ -92,12 +106,28 @@ toolset must be enabled for the agent (it is in the default toolset list).
 environment with the WebUI dependencies, starts the server, and waits for
 `/health`. Run it once in no-browser foreground mode to complete setup:
 
+**Linux / macOS / WSL2:**
 ```bash
 python3 bootstrap.py --no-browser --foreground --host 127.0.0.1 8787
 ```
 
+**[Windows] native Python — two sub-steps:**
+
+First, install the Hermes Agent manually (the bash auto-installer does not run
+on native Windows). Clone or download it into `%USERPROFILE%\.hermes\hermes-agent`
+and install its Python dependencies:
+```cmd
+git clone https://github.com/NousResearch/hermes-agent.git %USERPROFILE%\.hermes\hermes-agent
+cd %USERPROFILE%\.hermes\hermes-agent
+python -m pip install -r requirements.txt
+```
+Then run the bootstrap with `--skip-agent-install` so it does not attempt the
+bash installer:
+```cmd
+python bootstrap.py --no-browser --foreground --host 127.0.0.1 --skip-agent-install 8787
+```
+
 - It binds `127.0.0.1:8787` by default.
-- If the Hermes Agent is missing it will attempt the official installer.
 - On first run it drops into an onboarding wizard for provider/API-key setup.
   **ASK** the human for any provider choice or API key it requests — do not
   guess credentials.
@@ -106,6 +136,10 @@ python3 bootstrap.py --no-browser --foreground --host 127.0.0.1 8787
 ```bash
 curl -fsS http://127.0.0.1:8787/health && echo " — healthy"
 ```
+On Windows without curl, use:
+```cmd
+python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8787/health').read())"
+```
 Once healthy, stop this foreground process (**Ctrl-C**) and run it as a managed
 daemon in step 4. (Foreground is only for the guided first run.)
 
@@ -113,8 +147,8 @@ daemon in step 4. (Foreground is only for the guided first run.)
 
 ## 4. Run as a managed daemon (the normal way to launch)
 
-Use `ctl.sh` — it owns the PID file and is the only launch method with a clean
-stop path.
+**Linux / macOS / WSL2** — use `ctl.sh`, which owns the PID file and is the
+only launch method with a clean stop path:
 
 ```bash
 ./ctl.sh start                 # background daemon; PID at ~/.hermes/webui.pid
@@ -124,10 +158,24 @@ Bind elsewhere with env overrides, e.g. expose on the LAN:
 HERMES_WEBUI_HOST=0.0.0.0 HERMES_WEBUI_PORT=8787 ./ctl.sh start
 ```
 
-**Verify:**
+**Verify (Linux/macOS/WSL2):**
 ```bash
 ./ctl.sh status                # expect "● hermes-webui — running" + Health: ok
 ```
+
+**[Windows] native Python — `ctl.sh` does not work; launch directly:**
+
+```cmd
+set HERMES_WEBUI_HOST=127.0.0.1
+set HERMES_WEBUI_PORT=8787
+start /B python bootstrap.py --no-browser --skip-agent-install 8787 > webui.log 2>&1
+```
+To stop: find and kill the Python process by port:
+```cmd
+for /f "tokens=5" %p in ('netstat -ano ^| findstr :8787') do taskkill /PID %p /F
+```
+To expose on the LAN, set `HERMES_WEBUI_HOST=0.0.0.0` before running.
+
 Report the bound URL to the human: `http://<host>:<port>` (default
 `http://127.0.0.1:8787`).
 
@@ -161,6 +209,8 @@ optional — widgets render under any skin.
 
 ## 6. Operate (start / stop / status / logs)
 
+**Linux / macOS / WSL2:**
+
 | Intent | Command |
 |---|---|
 | Launch on user request | `./ctl.sh start` |
@@ -173,6 +223,15 @@ optional — widgets render under any skin.
 > `python3 bootstrap.py` is stopped with **Ctrl-C**; a detached `bootstrap.py` or
 > `./start.sh` is stopped by finding the PID (`lsof -i :8787` or `ss -tlnp`) and
 > `kill`ing it. Prefer `ctl.sh` for everything so stop is deterministic.
+
+**[Windows] native Python:**
+
+| Intent | Command |
+|---|---|
+| Launch | `start /B python bootstrap.py --no-browser --skip-agent-install 8787 > webui.log 2>&1` |
+| Stop | `for /f "tokens=5" %p in ('netstat -ano ^| findstr :8787') do taskkill /PID %p /F` |
+| Health check | `python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8787/health').read())"` |
+| Tail logs | `type webui.log` or `Get-Content webui.log -Wait` (PowerShell) |
 
 ---
 
