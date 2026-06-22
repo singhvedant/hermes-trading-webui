@@ -7757,7 +7757,16 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/skills":
         qs = parse_qs(parsed.query)
         category = qs.get("category", [None])[0]
-        data = _skills_list_from_dir(_active_skills_dir(), category=category)
+        profile_param = qs.get("profile", [""])[0].strip()
+        if profile_param:
+            try:
+                from api.profiles import get_hermes_home_for_profile
+                skills_dir = Path(get_hermes_home_for_profile(profile_param)) / "skills"
+            except Exception:
+                skills_dir = _active_skills_dir()
+        else:
+            skills_dir = _active_skills_dir()
+        data = _skills_list_from_dir(skills_dir, category=category)
         return j(handler, {"skills": data.get("skills", [])})
 
     if parsed.path == "/api/skills/usage":
@@ -13260,9 +13269,14 @@ def _read_active_project_context(workspace: Path | None) -> dict:
 
 def _handle_memory_read(handler, parsed=None):
     try:
-        from api.profiles import get_active_hermes_home
+        from api.profiles import get_active_hermes_home, _resolve_profile_home_for_name
 
-        home = get_active_hermes_home()
+        profile_name = parse_qs(parsed.query).get("profile", [""])[0] if parsed else ""
+        home = (
+            _resolve_profile_home_for_name(profile_name)
+            if profile_name
+            else get_active_hermes_home()
+        )
         mem_dir = home / "memories"
     except ImportError:
         home = Path.home() / ".hermes"
@@ -17137,8 +17151,9 @@ def _toggle_name_in_list(names, name: str, enabled: bool) -> list[str]:
 
 
 def _handle_skill_toggle(handler, body):
-    """Toggle a skill's enabled/disabled state in the active profile's config.yaml.
+    """Toggle a skill's enabled/disabled state in a profile's config.yaml.
 
+    Accepts an optional ``profile`` key in body to target a non-active profile.
     Writes through to ``skills.platform_disabled.webui`` when that key exists
     so the toggle takes effect for WebUI sessions (the agent's
     ``get_disabled_skill_names`` checks platform-specific lists first when
@@ -17151,15 +17166,28 @@ def _handle_skill_toggle(handler, body):
 
     name = body["name"].strip()
     enabled = bool(body["enabled"])
+    profile_param = (body.get("profile") or "").strip()
+
+    # Resolve skills dir and config path for the target profile
+    if profile_param:
+        try:
+            from api.profiles import get_hermes_home_for_profile
+            profile_home = Path(get_hermes_home_for_profile(profile_param))
+            skills_dir = profile_home / "skills"
+            config_path = profile_home / "config.yaml"
+        except Exception:
+            skills_dir = _active_skills_dir()
+            config_path = _active_profile_config_path()
+    else:
+        skills_dir = _active_skills_dir()
+        config_path = _active_profile_config_path()
 
     # Validate the skill exists in the filesystem
-    skills_dir = _active_skills_dir()
     search_dirs = _active_skill_search_dirs(skills_dir)
     skill_dir, skill_md = _find_skill_in_dirs(name, search_dirs)
     if not skill_md:
         return bad(handler, f"Skill '{name}' not found", 404)
 
-    config_path = _active_profile_config_path()
     with _cfg_lock:
         cfg = _load_yaml_config_file(config_path)
 
@@ -17196,9 +17224,14 @@ def _handle_memory_write(handler, body):
     except ValueError as e:
         return bad(handler, str(e))
     try:
-        from api.profiles import get_active_hermes_home
+        from api.profiles import get_active_hermes_home, _resolve_profile_home_for_name
 
-        home = get_active_hermes_home()
+        profile_name = body.get("profile") or ""
+        home = (
+            _resolve_profile_home_for_name(profile_name)
+            if profile_name
+            else get_active_hermes_home()
+        )
         mem_dir = home / "memories"
     except ImportError:
         home = Path.home() / ".hermes"

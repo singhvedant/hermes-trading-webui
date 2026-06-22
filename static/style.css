@@ -2585,15 +2585,25 @@
 .profile-opt-badge{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle;}
 .profile-opt-badge.running{background:#4caf50;box-shadow:0 0 4px rgba(76,175,80,.5);}
 .profile-opt-badge.stopped{background:rgba(255,255,255,.2);}
-.profile-card{padding:10px 12px;margin-bottom:4px;border:1px solid transparent;border-radius:8px;cursor:pointer;color:var(--muted);transition:background .15s,border-color .15s,color .15s;}
-.profile-card:hover{background:var(--surface);color:var(--text);}
-.profile-card.active{background:var(--accent-bg);border-color:var(--accent-bg-strong);color:var(--accent-text);}
-.profile-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-.profile-card-name{font-size:13px;font-weight:600;color:inherit;}
-.profile-card-name.is-active{color:var(--accent-text);}
-.profile-card-meta{font-size:11px;color:var(--muted);margin-top:3px;padding-left:12px;}
-.profile-card.active .profile-card-meta{color:var(--accent-text);opacity:.8;}
+/* Two independent states, never expressed with the same visual channel:
+   is-live (color, --accent family) = this is the agent actually running.
+   is-selected (contrast, --border2/--hover-bg) = this is the one you're inspecting.
+   A card can be both, either, or neither — the two treatments stack without collision. */
+.profile-card{position:relative;padding:12px 14px 12px 17px;margin-bottom:8px;border:1px solid var(--border);border-radius:8px;cursor:pointer;color:var(--text);background:transparent;transition:background .15s,border-color .15s;}
+.profile-card:hover{background:var(--hover-bg);border-color:var(--border2);}
+.profile-card.is-live{background:var(--accent-bg);}
+.profile-card.is-live::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:8px 0 0 8px;background:var(--accent);}
+/* selected state overrides is-live bg so the chosen card is always visually distinct */
+.profile-card.is-selected{background:var(--hover-bg);border-color:var(--text);box-shadow:0 0 0 1px var(--text);}
+.profile-card.is-live.is-selected{background:var(--hover-bg);}
+.profile-card-name{font-size:13px;font-weight:600;}
+.profile-card-meta{font-size:11px;color:var(--muted);margin-top:4px;}
+.profile-card-skills{font-size:11px;color:var(--muted);margin-top:2px;}
+.profile-card-soul{font-size:11px;color:var(--muted);font-style:italic;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .profile-card-actions{display:flex;gap:4px;flex-shrink:0;}
+.profile-live-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.03em;color:var(--accent-text);background:var(--accent-bg-strong);border-radius:999px;padding:2px 8px;margin-bottom:6px;}
+.switch-agent-btn{width:auto !important;padding:0 12px !important;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;}
+.switch-agent-btn span{white-space:nowrap;}
 /* ── Slash command autocomplete dropdown ── */
 .cmd-dropdown{display:none;position:absolute;left:0;right:0;bottom:calc(100% + 4px);width:auto;max-width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:10px;box-shadow:0 -8px 24px rgba(0,0,0,.4);z-index:200;max-height:240px;overflow-y:auto;}
 .cmd-dropdown.open{display:block;}
@@ -3999,22 +4009,18 @@ body.resizing .sidebar{transition:none!important;}
 .main-view{flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;background:var(--bg);}
 main.main > #mainChat,
 main.main > #mainSettings,
-main.main > #mainSkills,
-main.main > #mainMemory,
 main.main > #mainTasks,
 main.main > #mainKanban,
 main.main > #mainWorkspaces,
-main.main > #mainProfiles,
+main.main > #mainAgents,
 main.main > #mainInsights,
 main.main > #mainLogs{display:none;}
-main.main:not(.showing-settings):not(.showing-skills):not(.showing-memory):not(.showing-tasks):not(.showing-kanban):not(.showing-workspaces):not(.showing-profiles):not(.showing-insights):not(.showing-logs):not(.showing-plugin) > #mainChat{display:flex;}
+main.main:not(.showing-settings):not(.showing-tasks):not(.showing-kanban):not(.showing-workspaces):not(.showing-agents):not(.showing-insights):not(.showing-logs):not(.showing-plugin) > #mainChat{display:flex;}
 main.main.showing-settings > #mainSettings{display:flex;overflow-y:auto;}
-main.main.showing-skills > #mainSkills{display:flex;}
-main.main.showing-memory > #mainMemory{display:flex;}
 main.main.showing-tasks > #mainTasks{display:flex;}
 main.main.showing-kanban > #mainKanban{display:flex;overflow-y:auto;}
 main.main.showing-workspaces > #mainWorkspaces{display:flex;}
-main.main.showing-profiles > #mainProfiles{display:flex;}
+main.main.showing-agents > #mainAgents{display:flex;}
 main.main.showing-logs > #mainLogs{display:flex;}
 main.main.showing-plugin > #mainPlugin{display:flex;}
 main.main > #mainPlugin{display:none;}
@@ -5087,7 +5093,7 @@ main.main > #mainPlugin{display:none;}
   .msg-row[data-error="1"] .msg-body { padding: 8px 12px; }
 }
 
-/* ── Shared main-view tokens (used by #mainSkills, #mainTasks, #mainWorkspaces, #mainProfiles) ── */
+/* ── Shared main-view tokens (used by #mainSkills, #mainTasks, #mainWorkspaces, #mainAgents) ── */
 .main-view-header{
   display:flex;align-items:center;justify-content:space-between;gap:16px;
   min-height:41px;padding:8px 32px;border-bottom:1px solid var(--border);
@@ -5104,6 +5110,32 @@ main.main > #mainPlugin{display:none;}
 .main-view-empty-icon{color:var(--muted);opacity:.35;}
 .main-view-empty-title{font-size:18px;font-weight:600;color:var(--text);margin-top:4px;}
 .main-view-empty-sub{font-size:13px;color:var(--muted);line-height:1.55;max-width:420px;}
+
+/* ── Agents tab (merged Profiles + Memory) ── */
+.agents-section-label{padding:14px 16px 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-top:1px solid var(--border);margin-top:4px;}
+.agents-section-label-row{display:flex;align-items:center;justify-content:space-between;padding-right:8px;}
+.agents-section-label-row .agents-section-label{flex:1;}
+#mainAgents .agents-divider{flex-shrink:0;padding:10px 32px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg);}
+
+/* Memory: icon + label tiles, not a plain list — a trader recognizes a file by
+   its purpose, not by scanning text rows. */
+.memory-tile-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:8px;}
+.memory-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 6px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--muted);font-size:11px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+.memory-tile span{line-height:1.3;}
+.memory-tile:hover{background:var(--hover-bg);border-color:var(--border2);color:var(--text);}
+.memory-tile.active{background:var(--accent-bg);border-color:var(--accent-bg-strong);color:var(--accent-text);}
+
+/* Tools: collapsed by default behind a one-line summary — a trader checks
+   "are my tools on", they don't browse the catalog mid-session. */
+.skills-summary-row{display:flex;align-items:center;justify-content:space-between;width:100%;padding:8px 16px;border:none;background:transparent;color:var(--text);font-size:12px;cursor:pointer;text-align:left;}
+.skills-summary-row:hover{background:var(--hover-bg);}
+.skills-summary-chevron{color:var(--muted);font-size:11px;flex-shrink:0;}
+.skills-summary-warn{margin:0 16px 8px;padding:8px 10px;font-size:11px;color:var(--warning);background:var(--accent-bg);border-radius:6px;}
+#mainAgents .agents-profile-section,
+#mainAgents .agents-memory-section,
+#mainAgents .agents-skill-section{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
+#mainAgents .main-view-body,
+#mainAgents .main-view-empty{flex:1;min-height:0;}
 
 /* Hide header title/actions entirely when empty state is active */
 main.main > .main-view:not([id="mainChat"]):not([id="mainSettings"]) .main-view-header:has(.main-view-title:empty){display:none;}
@@ -5921,3 +5953,20 @@ html[data-conversation-outline="enabled"] #outlineToggleBtn:not([hidden]){displa
 /* Settings field highlight (mirrors msg-question-highlight / _highlightQuestionRow pattern) */
 .settings-field-highlight { animation: settings-field-pulse 1.6s ease-out; }
 @keyframes settings-field-pulse { 0% { box-shadow: 0 0 0 0 var(--focus-ring); } 35% { box-shadow: 0 0 0 4px var(--focus-ring); } 100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); } }
+
+/* ── Profile detail inline memory + skills ── */
+.profile-inline-tile-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.profile-inline-tile{display:flex;flex-direction:row;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--muted);font-size:11px;cursor:pointer;transition:background .15s,border-color .15s,color .15s;text-align:left;}
+.profile-inline-tile:hover{background:var(--hover-bg);border-color:var(--border2);color:var(--text);}
+.profile-inline-skills-list{display:flex;flex-direction:column;gap:0;}
+.profile-inline-skill-category{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:10px 0 4px;border-top:1px solid var(--border);margin-top:4px;}
+.profile-inline-skill-category:first-child{border-top:none;margin-top:0;padding-top:2px;}
+.profile-inline-skill-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);}
+.profile-inline-skill-row:last-child{border-bottom:none;}
+.profile-inline-skill-name{font-size:12px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.skill-name-link{background:transparent;border:none;padding:0;text-align:left;cursor:pointer;}
+.skill-name-link:hover{color:var(--accent-text);text-decoration:underline;}
+.skill-toggle-mini{flex-shrink:0;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;font-size:11px;cursor:pointer;transition:background .15s,color .15s,border-color .15s;}
+.skill-toggle-mini.on{background:var(--accent-bg);border-color:var(--accent-bg-strong);color:var(--accent-text);}
+.skill-toggle-mini.off{color:var(--muted);}
+.skill-toggle-mini:hover{border-color:var(--border2);background:var(--hover-bg);color:var(--text);}

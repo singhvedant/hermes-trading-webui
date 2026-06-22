@@ -20,6 +20,8 @@ let _kanbanSuppressCardClickUntil = 0;
 let _kanbanEventSource = null;
 let _kanbanEventSourceFailures = 0;
 let _skillsData = null; // cached skills list
+let _currentSkillsProfile = null; // profile whose skills are shown (null = active)
+let _agentRightMode = null; // 'profile' | 'memory' | 'skill' — which section is visible in #mainAgents right panel
 let _cronList = null; // cached cron jobs (array)
 let _currentCronDetail = null; // full cron job object
 let _cronMode = 'empty'; // 'empty' | 'read' | 'create' | 'edit'
@@ -37,9 +39,9 @@ let _logsSeverityFilter = 'all';
 
 // Map of panel names → i18n keys for the app titlebar label.
 const APP_TITLEBAR_KEYS = {
-  chat: 'tab_chat', tasks: 'tab_tasks', skills: 'tab_skills',
-  memory: 'tab_memory', workspaces: 'tab_workspaces',
-  profiles: 'tab_profiles', todos: 'tab_todos', insights: 'tab_insights', logs: 'tab_logs', settings: 'tab_settings',
+  chat: 'tab_chat', tasks: 'tab_tasks',
+  workspaces: 'tab_workspaces',
+  agents: 'tab_agents', todos: 'tab_todos', settings: 'tab_settings',
 };
 
 /**
@@ -278,21 +280,16 @@ async function switchPanel(name, opts = {}) {
   // showing-<name> class on <main>; no class means chat (the default).
   const mainEl = document.querySelector('main.main');
   if (mainEl) {
-    ['settings','skills','memory','tasks','kanban','workspaces','profiles','insights','logs','plugin'].forEach(p => {
+    ['settings','tasks','kanban','workspaces','agents','plugin'].forEach(p => {
       mainEl.classList.toggle('showing-' + p, nextPanel === p);
     });
   }
   // Lazy-load panel data
   if (nextPanel === 'tasks') await loadCrons();
   if (nextPanel === 'kanban') await loadKanban();
-  if (nextPanel === 'skills') await loadSkills();
-  if (nextPanel === 'memory') await loadMemory();
   if (nextPanel === 'workspaces') await loadWorkspacesPanel();
-  if (nextPanel === 'profiles') await loadProfilesPanel();
+  if (nextPanel === 'agents') { await loadProfilesPanel(); await loadMemory(); await loadSkills(); }
   if (nextPanel === 'todos') loadTodos();
-  if (nextPanel === 'insights') await loadInsights();
-  if (nextPanel === 'logs') await loadLogs();
-  _syncLogsAutoRefresh();
   if (typeof _syncSystemHealthMonitorVisibility === 'function') _syncSystemHealthMonitorVisibility();
   if (nextPanel === 'settings') {
     switchSettingsSection(_currentSettingsSection);
@@ -3818,19 +3815,132 @@ async function clearConversation() {
   } catch(e) { setStatus(t('clear_failed') + e.message); }
 }
 
+// ── Agent right-panel: mutual exclusion of profile / memory / skill ──
+function _setAgentRightMode(mode) {
+  _agentRightMode = mode;
+  const mainAgents = $('mainAgents');
+  if (!mainAgents) return;
+  mainAgents.dataset.agentRight = mode || '';
+  const profileSection = mainAgents.querySelector('.agents-profile-section');
+  const memorySection = mainAgents.querySelector('.agents-memory-section');
+  const skillSection = mainAgents.querySelector('.agents-skill-section');
+  if (profileSection) profileSection.style.display = (mode === 'profile' || !mode) ? '' : 'none';
+  if (memorySection) memorySection.style.display = mode === 'memory' ? '' : 'none';
+  if (skillSection) skillSection.style.display = mode === 'skill' ? '' : 'none';
+  // Deselect items in hidden sections so only the active section shows selection.
+  if (mode !== 'profile') {
+    document.querySelectorAll('.profile-card').forEach(e => e.classList.remove('is-selected'));
+  }
+  if (mode !== 'memory') {
+    document.querySelectorAll('#memoryPanel .memory-tile').forEach(e => e.classList.remove('active'));
+  }
+  if (mode !== 'skill') {
+    document.querySelectorAll('.skill-item').forEach(e => e.classList.remove('active'));
+  }
+  // Show back button when there's a profile to return to and we're in memory/skill view
+  const hasProfile = !!_currentProfileDetail;
+  const showBack = hasProfile && (mode === 'memory' || mode === 'skill');
+  const backMem = $('btnBackToProfile');
+  const backSkill = $('btnBackToProfileSkill');
+  if (backMem) backMem.style.display = showBack ? '' : 'none';
+  if (backSkill) backSkill.style.display = showBack ? '' : 'none';
+}
+
+function _backToProfile() {
+  if (_currentProfileDetail) openProfileDetail(_currentProfileDetail.name, null);
+}
+
 // ── Skills panel ──
-async function loadSkills() {
-  if (_skillsData) { renderSkills(_skillsData); return; }
+async function loadSkills(profileName) {
+  if (profileName !== undefined) _currentSkillsProfile = profileName || null;
+  // Always reload when profile changes; use cache only if same profile
   const box = $('skillsList');
   try {
-    const data = await api('/api/skills');
+    const qs = _currentSkillsProfile ? `?profile=${encodeURIComponent(_currentSkillsProfile)}` : '';
+    const data = await api(`/api/skills${qs}`);
     _skillsData = data.skills || [];
     // Prune collapsed state to only keep categories present in fresh data,
     // avoiding stale keys when categories are renamed or removed server-side.
     const liveCats = new Set(_skillsData.map(s => s.category || '(general)'));
     for (const c of _collapsedCats) { if (!liveCats.has(c)) _collapsedCats.delete(c); }
     renderSkills(_skillsData);
-  } catch(e) { box.innerHTML = `<div style="padding:12px;color:var(--accent);font-size:12px">Error: ${esc(e.message)}</div>`; }
+    _renderSkillsSummary(_skillsData);
+    _renderProfileInlineSkills(_skillsData);
+  } catch(e) { if (box) box.innerHTML = `<div style="padding:12px;color:var(--accent);font-size:12px">Error: ${esc(e.message)}</div>`; }
+}
+
+function _renderProfileInlineSkills(skills) {
+  const container = $('profileInlineSkills');
+  if (!container) return;
+  if (!skills || skills.length === 0) {
+    container.innerHTML = `<span style="color:var(--muted);font-size:12px">No skills found for this profile.</span>`;
+    return;
+  }
+  // Group by category
+  const cats = new Map();
+  for (const s of skills) {
+    const c = s.category || '(general)';
+    if (!cats.has(c)) cats.set(c, []);
+    cats.get(c).push(s);
+  }
+  let html = '';
+  for (const [cat, items] of cats) {
+    html += `<div class="profile-inline-skill-category">${esc(cat)}</div>`;
+    for (const s of items) {
+      html += `<div class="profile-inline-skill-row">
+        <button type="button" class="profile-inline-skill-name skill-name-link" data-skill="${esc(s.name)}">${esc(s.name)}</button>
+        <button type="button" class="skill-toggle-mini ${s.disabled ? 'off' : 'on'}" data-skill="${esc(s.name)}" data-enabled="${s.disabled ? 'false' : 'true'}" title="${s.disabled ? 'Enable' : 'Disable'} skill">
+          ${s.disabled ? 'Off' : 'On'}
+        </button>
+      </div>`;
+    }
+  }
+  container.innerHTML = html;
+  container.querySelectorAll('.skill-name-link').forEach(btn => {
+    btn.onclick = () => openSkill(btn.dataset.skill, null);
+  });
+  container.querySelectorAll('.skill-toggle-mini').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const name = btn.dataset.skill;
+      const currentlyEnabled = btn.dataset.enabled === 'true';
+      await toggleSkill(name, currentlyEnabled);
+    };
+  });
+}
+
+let _skillsBrowseOpen = false; // collapsed by default — a trader just wants the on/off count, not the full list
+
+function _renderSkillsSummary(skills) {
+  const textEl = $('skillsSummaryText');
+  if (!textEl) return;
+  const total = skills.length;
+  const on = skills.filter(s => !s.disabled).length;
+  textEl.textContent = `${on} of ${total} on`;
+  const warnId = 'skillsSummaryWarn';
+  let warn = $(warnId);
+  if (on === 0 && total > 0) {
+    if (!warn) {
+      warn = document.createElement('div');
+      warn.id = warnId;
+      warn.className = 'skills-summary-warn';
+      warn.textContent = "No skills are turned on — this agent can chat but can’t act.";
+      textEl.closest('.agents-section-label-row')?.insertAdjacentElement('afterend', warn);
+      // Re-insert before the toggle button so it sits above it, not after.
+      const toggle = $('skillsSummaryToggle');
+      if (toggle && toggle.parentNode) toggle.parentNode.insertBefore(warn, toggle);
+    }
+  } else if (warn) {
+    warn.remove();
+  }
+}
+
+function toggleSkillsBrowse() {
+  _skillsBrowseOpen = !_skillsBrowseOpen;
+  const wrap = $('skillsBrowseWrap');
+  const chevron = $('skillsSummaryChevron');
+  if (wrap) wrap.style.display = _skillsBrowseOpen ? '' : 'none';
+  if (chevron) chevron.textContent = _skillsBrowseOpen ? 'Hide ▾' : 'Show ▸';
 }
 
 let _collapsedCats = new Set(); // persisted collapsed state across re-renders
@@ -3911,9 +4021,11 @@ function filterSkills() {
 async function toggleSkill(name, currentlyEnabled) {
   const newEnabled = !currentlyEnabled;
   try {
+    const body = { name, enabled: newEnabled };
+    if (_currentSkillsProfile) body.profile = _currentSkillsProfile;
     const result = await api('/api/skills/toggle', {
       method: 'POST',
-      body: JSON.stringify({ name, enabled: newEnabled })
+      body: JSON.stringify(body)
     });
     if (result && result.ok) {
       if (_skillsData) {
@@ -3922,6 +4034,8 @@ async function toggleSkill(name, currentlyEnabled) {
       }
       if(typeof window!=='undefined'&&typeof window.invalidateSlashSkillCaches==='function') window.invalidateSlashSkillCaches();
       renderSkills(_skillsData || []);
+      _renderSkillsSummary(_skillsData || []);
+      _renderProfileInlineSkills(_skillsData || []);
     } else {
       setStatus((result && result.error) || t('skill_toggle_failed'));
     }
@@ -4027,6 +4141,7 @@ async function openSkill(name, el) {
   if (el) el.classList.add('active');
   _skillPreFormDetail = null;
   _editingSkillName = null;
+  _setAgentRightMode('skill');
   try {
     const data = await api(`/api/skills/content?name=${encodeURIComponent(name)}`);
     if (data && (data.success === false || data.error)) {
@@ -4095,10 +4210,11 @@ function editCurrentSkill() {
 }
 
 function openSkillCreate() {
-  if (typeof switchPanel === 'function' && _currentPanel !== 'skills') switchPanel('skills');
+  if (typeof switchPanel === 'function' && _currentPanel !== 'agents') switchPanel('agents');
   _skillPreFormDetail = _currentSkillDetail ? { ..._currentSkillDetail } : null;
   _editingSkillName = null;
   _skillMode = 'create';
+  _setAgentRightMode('skill');
   _renderSkillForm({ name: '', category: '', content: '', isEdit: false });
 }
 
@@ -4239,12 +4355,13 @@ let _notesSearchError = '';
 let _notesSearchLoading = false;
 let _currentMemorySection = null; // 'memory' | 'user' | 'soul' | 'project_context' | 'external_notes'
 let _memoryMode = 'empty'; // 'empty' | 'read' | 'edit'
+let _currentMemoryProfile = null; // name of the profile whose memory is being viewed/edited (null = active profile)
 
 const MEMORY_SECTIONS = [
   { key: 'memory', labelKey: 'my_notes', emptyKey: 'no_notes_yet', iconKey: 'brain' },
-  { key: 'user',   labelKey: 'user_profile', emptyKey: 'no_profile_yet', iconKey: 'user' },
+  { key: 'user',   label: 'About Me', emptyKey: 'no_profile_yet', iconKey: 'user' },
   { key: 'soul',   labelKey: 'agent_soul', emptyKey: 'no_soul_yet', iconKey: 'sparkles' },
-  { key: 'project_context', label: 'Project Context', empty: 'No project context file found for this workspace.', iconKey: 'file-text', readOnly: true },
+  { key: 'project_context', label: 'What I’m Working On', empty: 'No project context file found for this workspace.', iconKey: 'file-text', readOnly: true },
   { key: 'external_notes', labelKey: 'external_notes_sources', emptyKey: 'external_notes_empty', iconKey: 'book-open' },
 ];
 
@@ -4480,11 +4597,12 @@ async function previewExternalNote(source, id) {
 async function openMemorySection(section, el) {
   if (section === 'external_notes' && _memoryData && !_memoryData.external_notes_enabled) return;
   _currentMemorySection = section;
-  document.querySelectorAll('#memoryPanel .side-menu-item').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('#memoryPanel .memory-tile').forEach(e => e.classList.remove('active'));
   if (el) el.classList.add('active');
   if (section === 'external_notes') {
     await loadNotesSources(false);
   }
+  _setAgentRightMode('memory');
   _renderMemoryDetail(section);
 }
 
@@ -4511,7 +4629,7 @@ async function submitMemorySave() {
   if (!ta) return;
   if (errEl) errEl.style.display = 'none';
   try {
-    await api('/api/memory/write', {method:'POST', body: JSON.stringify({section: _currentMemorySection, content: ta.value})});
+    await api('/api/memory/write', {method:'POST', body: JSON.stringify({section: _currentMemorySection, content: ta.value, profile: _currentMemoryProfile || undefined})});
     showToast(t('memory_saved'));
     await loadMemory(true);
     _renderMemoryDetail(_currentMemorySection);
@@ -5293,7 +5411,7 @@ async function switchToWorkspace(path,name){
     S._profileSwitchWorkspace=null;
     syncTopbar();
     await loadDir('.');
-    if (_currentPanel === 'memory') await loadMemory(true);
+    if (_currentPanel === 'agents') await loadMemory(true);
     showToast(t('workspace_switched_to',name||getWorkspaceFriendlyName(path)));
   }catch(e){setStatus(t('switch_failed')+e.message);}
 }
@@ -5303,11 +5421,9 @@ let _profilesCache = null;
 let _profileSwitchGeneration = 0;
 
 async function _profileSwitchPanelLoad(){
-  if (_currentPanel === 'skills') await loadSkills();
-  if (_currentPanel === 'memory') await loadMemory();
   if (_currentPanel === 'tasks') await loadCrons();
   if (_currentPanel === 'kanban') await loadKanban();
-  if (_currentPanel === 'profiles') await loadProfilesPanel();
+  if (_currentPanel === 'agents') { await loadProfilesPanel(); await loadMemory(); _skillsData = null; await loadSkills(); }
   if (_currentPanel === 'workspaces') await loadWorkspacesPanel();
 }
 
@@ -5344,17 +5460,6 @@ async function loadProfilesPanel() {
     const data = await api('/api/profiles');
     _profilesCache = data;
     panel.innerHTML = '';
-    const explainer = document.createElement('div');
-    explainer.className = 'profile-card profile-help-card';
-    explainer.innerHTML = `
-      <div class="profile-card-header">
-        <div style="min-width:0;flex:1">
-          <div class="profile-card-name">Profiles vs workspaces</div>
-          <div class="profile-card-meta">Use profiles for how the agent works; use workspaces for what files it works on.</div>
-        </div>
-      </div>`;
-    explainer.onclick = () => _renderProfileConceptHelp(data.active || 'default');
-    panel.appendChild(explainer);
     if (!data.profiles || !data.profiles.length) {
       const emptyMsg = document.createElement('div');
       emptyMsg.style.cssText = 'padding:16px;color:var(--muted);font-size:12px';
@@ -5371,25 +5476,24 @@ async function loadProfilesPanel() {
       card.className = 'profile-card';
       card.dataset.name = p.name;
       const meta = [];
-      if (p.model) meta.push(p.model.split('/').pop());
-      if (p.provider) meta.push(p.provider);
-      if (p.total_skills && p.total_skills > 0) meta.push(t('profile_skill_count', p.total_skills).replace(String(p.total_skills), `${p.enabled_skills} / ${p.total_skills}`));
-      const gwDot = p.gateway_running
-        ? `<span class="profile-opt-badge running" title="${esc(t('profile_gateway_running'))}"></span>`
-        : `<span class="profile-opt-badge stopped" title="${esc(t('profile_gateway_stopped'))}"></span>`;
-      const isActive = p.name === activeName;
-      const activeBadge = isActive ? `<span style="color:var(--link);font-size:10px;font-weight:600;margin-left:6px">${esc(t('profile_active'))}</span>` : '';
+      if (p.provider || p.model) meta.push([p.provider, p.model ? p.model.split('/').pop() : ''].filter(Boolean).join(' \u00b7 '));
+      const skillsLine = (p.total_skills && p.total_skills > 0)
+        ? `${t('profile_skill_count', p.total_skills).replace(String(p.total_skills), `${p.enabled_skills}/${p.total_skills}`)}`
+        : t('profile_no_configuration');
+      const isLive = p.name === activeName;
+      const liveChip = isLive ? `<span class="profile-live-chip">\u25cf ${esc(t('profile_active'))}</span>` : '';
       const defaultBadge = p.is_default ? ` <span style="opacity:.5">${esc(t('profile_default_label'))}</span>` : '';
       const hiddenBadge = p.visible === false ? ' <span class="detail-badge" title="Hidden from chat">Hidden from chat</span>' : '';
+      const soulLine = p.soul_snippet ? `<div class="profile-card-soul">\u201c${esc(p.soul_snippet)}\u201d</div>` : '';
       card.innerHTML = `
-        <div class="profile-card-header">
-          <div style="min-width:0;flex:1">
-            <div class="profile-card-name${isActive ? ' is-active' : ''}">${gwDot}${esc(p.name)}${defaultBadge}${activeBadge}${hiddenBadge}</div>
-            ${meta.length ? `<div class="profile-card-meta">${esc(meta.join(' \u00b7 '))}</div>` : `<div class="profile-card-meta">${esc(t('profile_no_configuration'))}</div>`}
-          </div>
-        </div>`;
+        ${liveChip}
+        <div class="profile-card-name">${esc(p.name)}${defaultBadge}${hiddenBadge}</div>
+        ${meta.length ? `<div class="profile-card-meta">${esc(meta.join(' '))}</div>` : ''}
+        <div class="profile-card-skills">${esc(skillsLine)}</div>
+        ${soulLine}`;
       card.onclick = () => openProfileDetail(p.name, card);
-      if (_currentProfileDetail && _currentProfileDetail.name === p.name) card.classList.add('active');
+      if (isLive) card.classList.add('is-live');
+      if (_currentProfileDetail && _currentProfileDetail.name === p.name) card.classList.add('is-selected');
       panel.appendChild(card);
     }
     // Re-render detail with fresh data if we have one and we're not in a form
@@ -5397,32 +5501,14 @@ async function loadProfilesPanel() {
       const refreshed = data.profiles.find(p => p.name === _currentProfileDetail.name);
       if (refreshed) _renderProfileDetail(refreshed, data.active);
       else _clearProfileDetail();
+    } else if (!_currentProfileDetail && _profileMode !== 'create') {
+      // Default to previewing the active profile's memory/config so the tab
+      // isn't empty on first open.
+      openProfileDetail(activeName);
     }
   } catch (e) {
     panel.innerHTML = `<div style="color:var(--accent);font-size:12px;padding:12px">${esc(t('error_prefix'))}${esc(e.message)}</div>`;
   }
-}
-
-function _renderProfileConceptHelp(activeName){
-  const title = $('profileDetailTitle');
-  const body = $('profileDetailBody');
-  const empty = $('profileDetailEmpty');
-  if (!title || !body) return;
-  title.textContent = 'Profiles vs workspaces';
-  body.innerHTML = `
-    <div class="main-view-content">
-      <div class="detail-card">
-        <div class="detail-card-title">Use profiles for how; workspaces for what</div>
-        <div class="detail-row"><div class="detail-row-label">Profiles</div><div class="detail-row-value">Agent identity, memory, skills, model/provider config, and connected tools. Create profiles for roles like researcher, writer, marketer, or developer when those roles should carry different context or capabilities.</div></div>
-        <div class="detail-row"><div class="detail-row-label">Workspaces</div><div class="detail-row-value">Project or product folders on disk. Use one workspace per repo/product so chat, terminal, and file browsing point at the right files.</div></div>
-        <div class="detail-row"><div class="detail-row-label">Together</div><div class="detail-row-value">A profile can have a default workspace, but you can still switch workspaces for a session. Profiles answer “who is working?”; workspaces answer “where are they working?”</div></div>
-      </div>
-    </div>`;
-  body.style.display = '';
-  if (empty) empty.style.display = 'none';
-  _profileMode = 'read';
-  _currentProfileDetail = null;
-  _setProfileHeaderButtons('empty');
 }
 
 function _renderProfileDetail(p, activeName){
@@ -5435,8 +5521,8 @@ function _renderProfileDetail(p, activeName){
   const isActive = p.name === activeName;
   const isDefault = !!p.is_default;
   const statusBadge = isActive
-    ? `<span class="detail-badge active">${esc(t('profile_active'))}</span>`
-    : `<span class="detail-badge">Inactive</span>`;
+    ? `<span class="profile-live-chip">● ${esc(t('profile_active'))}</span>`
+    : `<span class="detail-badge">Not running</span>`;
   const defaultBadge = isDefault ? ` <span class="detail-badge">${esc(t('profile_default_label'))}</span>` : '';
   const gwBadge = p.gateway_running
     ? `<span class="detail-badge ok">${esc(t('profile_gateway_running'))}</span>`
@@ -5450,21 +5536,43 @@ function _renderProfileDetail(p, activeName){
   rows.push(`<div class="detail-row"><div class="detail-row-label">API key</div><div class="detail-row-value">${p.has_env ? esc(t('profile_api_keys_configured')) : '<span style="color:var(--muted)">Not configured</span>'}</div></div>`);
   if (p.total_skills && p.total_skills > 0) rows.push(`<div class="detail-row"><div class="detail-row-label">Skills</div><div class="detail-row-value">${esc(t('profile_skill_count', p.total_skills).replace(String(p.total_skills), `${p.enabled_skills} / ${p.total_skills}`))}</div></div>`);
   if (p.default_workspace) rows.push(`<div class="detail-row"><div class="detail-row-label">Default space</div><div class="detail-row-value"><code>${esc(p.default_workspace)}</code></div></div>`);
+  const memorySectionsHtml = MEMORY_SECTIONS
+    .filter(s => !(s.key === 'external_notes' && _memoryData && !_memoryData.external_notes_enabled))
+    .map(s => `<button type="button" class="profile-inline-tile" data-section="${esc(s.key)}">${li(s.iconKey,16)}<span>${esc(_memorySectionLabel(s))}</span></button>`)
+    .join('');
   body.innerHTML = `
     <div class="main-view-content">
       <div class="detail-card">
         <div class="detail-card-title">Profile</div>
         ${rows.join('')}
       </div>
+      <div class="detail-card">
+        <div class="detail-card-title">Memory</div>
+        <div class="profile-inline-tile-grid">${memorySectionsHtml}</div>
+      </div>
+      <div class="detail-card">
+        <div class="detail-card-title-row">
+          <span class="detail-card-title" style="margin-bottom:0">Skills</span>
+          <button type="button" class="panel-head-btn has-tooltip has-tooltip--bottom" data-tooltip="New skill" onclick="openSkillCreate()" aria-label="New skill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        </div>
+        <div id="profileInlineSkills" class="profile-inline-skills-list" style="margin-top:10px"><span style="color:var(--muted);font-size:12px">Loading…</span></div>
+      </div>
     </div>`;
   body.style.display = '';
   if (empty) empty.style.display = 'none';
   _profileMode = 'read';
   _setProfileHeaderButtons('read', p, activeName);
+  // Wire memory tile clicks inside the profile detail panel
+  body.querySelectorAll('.profile-inline-tile[data-section]').forEach(btn => {
+    btn.onclick = () => openMemorySection(btn.dataset.section, null);
+  });
+  // Populate skills immediately if already loaded; loadSkills will update when it resolves
+  if (_skillsData) _renderProfileInlineSkills(_skillsData);
 }
 
 function _setProfileHeaderButtons(mode, p, activeName){
   const actBtn = $('btnActivateProfileDetail');
+  const liveLabel = $('profileLiveLabel');
   const delBtn = $('btnDeleteProfileDetail');
   const cancelBtn = $('btnCancelProfileDetail');
   const saveBtn = $('btnSaveProfileDetail');
@@ -5473,13 +5581,16 @@ function _setProfileHeaderButtons(mode, p, activeName){
   if (mode === 'read') {
     const isActive = p && p.name === activeName;
     const isDefault = !!(p && p.is_default);
-    if (isActive) hide(actBtn); else show(actBtn);
+    // Exactly one of these two is ever visible: the live label answers
+    // "is this running" with nothing to click; the switch button is the
+    // only control that changes what's running.
+    if (isActive) { hide(actBtn); show(liveLabel); } else { show(actBtn); hide(liveLabel); }
     if (isDefault) hide(delBtn); else show(delBtn);
     hide(cancelBtn); hide(saveBtn);
   } else if (mode === 'create') {
-    hide(actBtn); hide(delBtn); show(cancelBtn); show(saveBtn);
+    hide(actBtn); hide(liveLabel); hide(delBtn); show(cancelBtn); show(saveBtn);
   } else {
-    [actBtn, delBtn, cancelBtn, saveBtn].forEach(hide);
+    [actBtn, liveLabel, delBtn, cancelBtn, saveBtn].forEach(hide);
   }
 }
 
@@ -5487,16 +5598,22 @@ function openProfileDetail(name, el){
   if (!_profilesCache || !_profilesCache.profiles) return;
   const p = _profilesCache.profiles.find(x => x.name === name);
   if (!p) return;
-  document.querySelectorAll('.profile-card').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.profile-card').forEach(e => e.classList.remove('is-selected'));
   const target = el || document.querySelector(`.profile-card[data-name="${CSS.escape(name)}"]`);
-  if (target) target.classList.add('active');
+  if (target) target.classList.add('is-selected');
   _profilePreFormDetail = null;
   _renderProfileDetail(p, _profilesCache.active);
+  // Clear memory selection so tiles don't show a stale active tile in the sidebar.
+  _currentMemorySection = null;
+  _setAgentRightMode('profile');
+  loadMemory(true, name);
+  loadSkills(name);
 }
 
 function _clearProfileDetail(){
   _currentProfileDetail = null;
   _profileMode = 'empty';
+  _setAgentRightMode('profile');
   const title = $('profileDetailTitle');
   const body = $('profileDetailBody');
   const empty = $('profileDetailEmpty');
@@ -5504,11 +5621,35 @@ function _clearProfileDetail(){
   if (body) { body.innerHTML = ''; body.style.display = 'none'; }
   if (empty) empty.style.display = '';
   _setProfileHeaderButtons('empty');
+  const runningBtn = $('profileEmptyRunningNowBtn');
+  const activeName = _profilesCache && _profilesCache.active;
+  if (runningBtn) {
+    if (activeName) { runningBtn.style.display = ''; runningBtn.textContent = `Running now: ● ${activeName} — View`; }
+    else runningBtn.style.display = 'none';
+  }
+}
+
+function _openRunningProfile(){
+  const activeName = _profilesCache && _profilesCache.active;
+  if (activeName) openProfileDetail(activeName);
 }
 
 async function activateCurrentProfile(){
-  if (!_currentProfileDetail) return;
-  await switchToProfile(_currentProfileDetail.name);
+  const target = _currentProfileDetail;
+  if (!target) return;
+  const current = (S.activeProfile || (_profilesCache && _profilesCache.active) || 'default');
+  const modelLine = [target.provider, target.model ? target.model.split('/').pop() : ''].filter(Boolean).join(' · ');
+  const toolsLine = (target.total_skills && target.total_skills > 0)
+    ? `${target.enabled_skills} of ${target.total_skills} skills turned on`
+    : 'no skills configured yet';
+  const ok = await showConfirmDialog({
+    title: 'Switch the running agent?',
+    message: `Hermes will stop running ${current} and start running ${target.name}.${modelLine ? ` ${target.name} uses ${modelLine} and has ${toolsLine}.` : ''} Anything in progress on ${current} will finish first.`,
+    confirmLabel: `Switch to ${target.name}`,
+    cancelLabel: `Keep ${current}`,
+  });
+  if (!ok) return;
+  await switchToProfile(target.name);
 }
 
 async function deleteCurrentProfile(){
@@ -5556,7 +5697,7 @@ function renderProfileDropdown(data) {
   const div = document.createElement('div'); div.className = 'ws-divider'; dd.appendChild(div);
   const mgmt = document.createElement('div'); mgmt.className = 'profile-opt ws-manage';
   mgmt.innerHTML = `${li('settings',12)} ${esc(t('manage_profiles'))}`;
-  mgmt.onclick = () => { closeProfileDropdown(); mobileSwitchPanel('profiles'); };
+  mgmt.onclick = () => { closeProfileDropdown(); mobileSwitchPanel('agents'); };
   dd.appendChild(mgmt);
 }
 
@@ -5750,9 +5891,10 @@ async function switchToProfile(name) {
 }
 
 function openProfileCreate(){
-  if (typeof switchPanel === 'function' && _currentPanel !== 'profiles') switchPanel('profiles');
+  if (typeof switchPanel === 'function' && _currentPanel !== 'agents') switchPanel('agents');
   _profilePreFormDetail = _currentProfileDetail ? { ..._currentProfileDetail } : null;
   _profileMode = 'create';
+  _setAgentRightMode('profile');
   _renderProfileForm();
 }
 
@@ -5895,12 +6037,15 @@ async function deleteProfile(name) {
 }
 
 // ── Memory panel ──
-async function loadMemory(force) {
+async function loadMemory(force, profileName) {
   const panel = $('memoryPanel');
+  if (profileName !== undefined) _currentMemoryProfile = profileName;
   try {
-    const memoryUrl = S.session && S.session.session_id
-      ? `/api/memory?session_id=${encodeURIComponent(S.session.session_id)}`
-      : '/api/memory';
+    const params = new URLSearchParams();
+    if (S.session && S.session.session_id) params.set('session_id', S.session.session_id);
+    if (_currentMemoryProfile) params.set('profile', _currentMemoryProfile);
+    const qs = params.toString();
+    const memoryUrl = qs ? `/api/memory?${qs}` : '/api/memory';
     const data = await api(memoryUrl);
     _memoryData = data;
     if (_currentMemorySection === 'external_notes' && !data.external_notes_enabled) {
@@ -5911,13 +6056,14 @@ async function loadMemory(force) {
     }
     if (panel) {
       panel.innerHTML = '';
+      panel.classList.add('memory-tile-grid');
       for (const s of MEMORY_SECTIONS) {
         if (s.key === 'external_notes' && !_memoryData.external_notes_enabled) continue;
         const el = document.createElement('button');
         el.type = 'button';
-        el.className = 'side-menu-item';
+        el.className = 'memory-tile';
         if (_currentMemorySection === s.key) el.classList.add('active');
-        el.innerHTML = `${li(s.iconKey,16)}<span>${esc(_memorySectionLabel(s))}</span>`;
+        el.innerHTML = `${li(s.iconKey,18)}<span>${esc(_memorySectionLabel(s))}</span>`;
         el.onclick = () => openMemorySection(s.key, el);
         panel.appendChild(el);
       }
@@ -7387,7 +7533,7 @@ async function switchPluginPage(event, path, label) {
   _currentPanel = 'plugin';
   const mainEl = document.querySelector('main.main');
   if (mainEl) {
-    ['settings','skills','memory','tasks','kanban','workspaces','profiles','insights','logs','plugin'].forEach(p => {
+    ['settings','tasks','kanban','workspaces','agents','plugin'].forEach(p => {
       mainEl.classList.toggle('showing-' + p, p === 'plugin');
     });
   }

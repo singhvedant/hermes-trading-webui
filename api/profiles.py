@@ -1083,6 +1083,31 @@ _SKILLS_STATS_CACHE: dict[Path, tuple[int, int, float]] = {}
 _SKILLS_STATS_CACHE_TTL = 8.0  # seconds
 
 
+def _get_profile_soul_snippet(profile_dir: Path, max_len: int = 90) -> str:
+    """Return a short preview of a profile's persona (SOUL.md), for list views.
+
+    SOUL.md templates start with an HTML-comment instructions block; strip
+    that and any markdown heading markers so the snippet is the actual
+    persona text a trader wrote, not boilerplate.
+    """
+    soul_file = Path(profile_dir) / "SOUL.md"
+    if not soul_file.is_file():
+        return ""
+    try:
+        text = soul_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    lines = [ln.strip().lstrip("#").strip() for ln in text.splitlines()]
+    lines = [ln for ln in lines if ln]
+    # Prefer the first substantial line (a short markdown heading like "Agent
+    # Soul" isn't the persona itself); fall back to whatever's there.
+    line = next((ln for ln in lines if len(ln) >= 20), lines[0] if lines else "")
+    if not line:
+        return ""
+    return line[:max_len] + ("…" if len(line) > max_len else "")
+
+
 def _get_profile_skills_stats(profile_dir: Path) -> tuple[int, int]:
     """Calculate (enabled_count, compatible_count) for a profile directory."""
     import time
@@ -1222,6 +1247,7 @@ def _build_profile_rows_fast() -> list | None:
             'skill_count': enabled_count,
             'enabled_skills': enabled_count,
             'total_skills': total_count,
+            'soul_snippet': _get_profile_soul_snippet(home),
         }
 
     rows: list = []
@@ -1295,6 +1321,7 @@ def list_profiles_api() -> list:
                 'skill_count': enabled_count,
                 'enabled_skills': enabled_count,
                 'total_skills': total_count,
+                'soul_snippet': _get_profile_soul_snippet(p.path),
             })
         return result
 
