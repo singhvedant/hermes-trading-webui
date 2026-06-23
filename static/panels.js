@@ -14,6 +14,10 @@ let _kanbanBoardsList = null;
 let _kanbanBoardMenuOpen = false;
 let _kanbanIsDispatching = false;
 let _kanbanSuppressCardClickUntil = 0;
+// Scheduled (cron) jobs surfaced as a read-only "Scheduled" lane on the Board.
+// Crons are a separate backend store from kanban tasks; this lane is a
+// presentation merge fed by /api/crons. Cards are not draggable.
+let _kanbanScheduledJobs = [];
 // SSE event stream — replaces the 30s polling cadence with a long-lived
 // /api/kanban/events/stream connection. Falls back to polling when the
 // EventSource fails to connect (proxy that strips text/event-stream, etc).
@@ -1856,11 +1860,58 @@ function _kanbanEmptyBoardHtml(){
   return `<div class="main-view-empty"><div class="main-view-empty-title">${esc(t('kanban_no_data'))}</div><div class="main-view-empty-sub">${esc(t('kanban_work_queue_hint'))}</div></div>`;
 }
 
+async function _loadKanbanScheduled(){
+  // Fetch scheduled (cron) jobs for the Board's Scheduled lane. Best-effort:
+  // a failure just leaves the lane empty without breaking the board.
+  try {
+    const data = await api('/api/crons');
+    _kanbanScheduledJobs = Array.isArray(data && data.jobs) ? data.jobs : [];
+  } catch(e) {
+    _kanbanScheduledJobs = [];
+  }
+}
+
+function _kanbanScheduledCard(job){
+  let meta = {listClass: '', label: ''};
+  try { meta = _cronStatusMeta(job) || meta; } catch(_) {}
+  const sched = esc(job.schedule_display || (job.schedule && job.schedule.expression) || '');
+  const label = esc(job.name || job.id || '');
+  const status = meta.label ? `<span class="cron-status ${esc(meta.listClass)}">${esc(meta.label)}</span>` : '';
+  const idAttr = esc(String(job.id || ''));
+  return `<article class="kanban-card kanban-card-scheduled" data-cron-id="${idAttr}" onclick="openScheduledFromBoard('${idAttr}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openScheduledFromBoard('${idAttr}')}">
+      <div class="kanban-card-topline"><span class="kanban-card-id">⏰ ${label}</span>${status}</div>
+      ${sched ? `<div class="kanban-card-scheduled-sched">${sched}</div>` : ''}
+    </article>`;
+}
+
+function _kanbanScheduledColumnHtml(){
+  const jobs = _kanbanScheduledJobs || [];
+  const cards = jobs.length
+    ? jobs.map(_kanbanScheduledCard).join('')
+    : `<div class="kanban-empty">${esc(t('kanban_no_scheduled') || 'No scheduled tasks')}</div>`;
+  return `<section class="kanban-column kanban-column-scheduled" data-status="scheduled">
+      <div class="kanban-column-head">
+        <span>${esc(t('kanban_status_scheduled') || 'Scheduled')}</span>
+        <span class="kanban-count">${jobs.length}</span>
+      </div>
+      <div class="kanban-column-body">${cards}</div>
+    </section>`;
+}
+
+async function openScheduledFromBoard(id){
+  if (!id) return;
+  if (typeof switchPanel === 'function') await switchPanel('tasks');
+  if (typeof openCronDetail === 'function') openCronDetail(id);
+}
+
 function _kanbanRenderBoard(){
   const board = $('kanbanBoard');
   if (!board) return;
+  // The Scheduled lane (crons) is always rendered first, independent of the
+  // kanban task store, so scheduled work is visible even on an empty board.
+  const scheduledHtml = _kanbanScheduledColumnHtml();
   if (!_kanbanBoard || !_kanbanBoard.columns) {
-    board.innerHTML = _kanbanEmptyBoardHtml();
+    board.innerHTML = scheduledHtml + _kanbanEmptyBoardHtml();
     return;
   }
   const columns = _kanbanVisibleTasks();
@@ -1868,10 +1919,11 @@ function _kanbanRenderBoard(){
   if ($('kanbanSummary')) $('kanbanSummary').textContent = String(t('kanban_visible_tasks')).replace('{0}', total);
   _kanbanRenderSidebar(columns);
   if (total === 0) {
-    board.innerHTML = _kanbanEmptyBoardHtml();
+    board.innerHTML = scheduledHtml + _kanbanEmptyBoardHtml();
     return;
   }
-  board.innerHTML = _kanbanLanesByProfile ? _kanbanRenderProfileLanes(columns) : columns.map(_kanbanRenderColumn).join('');
+  const colsHtml = _kanbanLanesByProfile ? _kanbanRenderProfileLanes(columns) : columns.map(_kanbanRenderColumn).join('');
+  board.innerHTML = scheduledHtml + colsHtml;
 }
 
 function _kanbanCard(task, status){
@@ -1948,6 +2000,7 @@ async function loadKanban(animate){
     if (_kanbanCurrentBoard) params.set('board', _kanbanCurrentBoard);
     const path = '/api/kanban/board' + (params.toString() ? '?' + params.toString() : '');
     const data = await api(path);
+    await _loadKanbanScheduled();
     if (data && data.changed === false && _kanbanBoard) { _kanbanRenderBoard(); return; }
     _kanbanBoard = data || {columns: []};
     if ((!_kanbanBoard.columns || !_kanbanBoard.columns.length) && config && config.columns) {
@@ -2792,6 +2845,211 @@ async function submitKanbanTaskModal(){
     }
   } catch(e) {
     if (errEl) errEl.textContent = (e.message || String(e));
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Unified "New task" modal (dock merged button).
+//
+// One modal, two panes toggled by a segmented control:
+//   • Dispatcher → POST /api/kanban/tasks   (a kanban work item)
+//   • Scheduled  → POST /api/crons/create   (a time-triggered cron job)
+//
+// Architecture note: scheduled tasks (crons) and kanban tasks are SEPARATE
+// backend stores. This modal is a creation surface only — it routes each pane
+// to its own existing endpoint. Editing happens in their respective detail
+// surfaces (kanban task detail / cron detail via the Board's Scheduled lane).
+// ────────────────────────────────────────────────────────────────────────────
+let _ntmType = 'dispatcher';   // 'dispatcher' | 'scheduled'
+let _ntmScheduledReady = false; // selects populated lazily once per open
+
+function openNewTaskModal(type){
+  const modal = document.getElementById('newTaskModal');
+  if (!modal) return;
+  const err = document.getElementById('ntmError');
+  if (err) err.textContent = '';
+  modal.hidden = false;
+  _ntmSetType(type || 'dispatcher');
+  document.addEventListener('keydown', _ntmKey);
+}
+
+function closeNewTaskModal(){
+  const modal = document.getElementById('newTaskModal');
+  if (modal) modal.hidden = true;
+  document.removeEventListener('keydown', _ntmKey);
+}
+
+function _ntmKey(ev){
+  if (ev.key === 'Escape'){ ev.preventDefault(); closeNewTaskModal(); }
+}
+
+function _ntmSetType(type){
+  _ntmType = (type === 'scheduled') ? 'scheduled' : 'dispatcher';
+  const isSched = _ntmType === 'scheduled';
+  const tabD = document.getElementById('ntmTabDispatcher');
+  const tabS = document.getElementById('ntmTabScheduled');
+  const paneD = document.getElementById('ntmPaneDispatcher');
+  const paneS = document.getElementById('ntmPaneScheduled');
+  if (tabD){ tabD.classList.toggle('active', !isSched); tabD.setAttribute('aria-selected', String(!isSched)); }
+  if (tabS){ tabS.classList.toggle('active', isSched); tabS.setAttribute('aria-selected', String(isSched)); }
+  if (paneD) paneD.hidden = isSched;
+  if (paneS) paneS.hidden = !isSched;
+  const err = document.getElementById('ntmError');
+  if (err) err.textContent = '';
+  if (isSched){
+    _ntmPopulateScheduled();
+    const f = document.getElementById('ntmSchedName'); if (f) f.focus();
+  } else {
+    _ntmPopulateDispatcherAssignee();
+    const f = document.getElementById('ntmDispTitle'); if (f) f.focus();
+  }
+}
+
+async function _ntmPopulateDispatcherAssignee(){
+  const sel = document.getElementById('ntmDispAssignee');
+  if (!sel) return;
+  let profileNames = [];
+  try { profileNames = await _kanbanLoadProfileNames(); } catch(_) { profileNames = []; }
+  const historical = (_kanbanBoard && Array.isArray(_kanbanBoard.assignees)) ? _kanbanBoard.assignees : [];
+  const seen = new Set();
+  const profiles = [];
+  for (const n of profileNames){ if (n && !seen.has(n)){ profiles.push(n); seen.add(n); } }
+  const extras = [];
+  for (const n of historical){ if (n && !seen.has(n)){ extras.push(n); seen.add(n); } }
+  let html = '';
+  if (profiles.length){
+    html += `<optgroup label="${esc(t('kanban_assignee_profiles_label') || 'Hermes profiles')}">`;
+    html += profiles.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    html += '</optgroup>';
+  }
+  if (extras.length){
+    html += `<optgroup label="${esc(t('kanban_assignee_other_label') || 'Other (CLI lanes / removed profiles)')}">`;
+    html += extras.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    html += '</optgroup>';
+  }
+  html += `<option value="" selected>${esc(t('kanban_assignee_unassigned') || '— Unassigned (won’t auto-run) —')}</option>`;
+  sel.innerHTML = html;
+}
+
+async function _ntmPopulateScheduled(){
+  // Profiles
+  try {
+    await loadCronProfiles();
+    const psel = document.getElementById('ntmSchedProfile');
+    if (psel) psel.innerHTML = _cronProfileOptions('');
+  } catch(_) {}
+  // Delivery targets (reuse the cron delivery-options cache)
+  const dsel = document.getElementById('ntmSchedDeliver');
+  if (dsel){
+    try {
+      if (!_cronDeliveryOptionsCache){
+        const res = await api('/api/crons/delivery-options');
+        _cronDeliveryOptionsCache = res && res.platforms ? res.platforms : [];
+      }
+      dsel.innerHTML = '';
+      for (const p of _cronDeliveryOptionsCache){
+        const opt = document.createElement('option');
+        opt.value = p.value; opt.textContent = p.label;
+        if (p.value === 'local') opt.selected = true;
+        dsel.appendChild(opt);
+      }
+      if (!dsel.options.length) dsel.innerHTML = '<option value="local">Local (save output only)</option>';
+    } catch(e) {
+      dsel.innerHTML = '<option value="local">Local (save output only)</option>';
+    }
+  }
+  // Once-warning binding (idempotent)
+  const schedEl = document.getElementById('ntmSchedSchedule');
+  if (schedEl && !schedEl.dataset.ntmBound){
+    schedEl.dataset.ntmBound = '1';
+    const sync = () => {
+      const warn = document.getElementById('ntmSchedOnceWarning');
+      if (warn) warn.style.display = _cronScheduleKindForInput(schedEl.value) === 'once' ? '' : 'none';
+    };
+    schedEl.addEventListener('input', sync);
+    schedEl.addEventListener('change', sync);
+    sync();
+  }
+  _ntmScheduledReady = true;
+}
+
+async function submitNewTaskModal(){
+  if (_ntmType === 'scheduled') return _ntmSubmitScheduled();
+  return _ntmSubmitDispatcher();
+}
+
+async function _ntmSubmitDispatcher(){
+  const err = document.getElementById('ntmError');
+  const submitBtn = document.getElementById('ntmSubmit');
+  const title = (document.getElementById('ntmDispTitle')||{}).value;
+  const titleVal = (title || '').trim();
+  if (!titleVal){
+    if (err) err.textContent = t('kanban_title_required') || 'Title is required.';
+    return;
+  }
+  const bodyVal = ((document.getElementById('ntmDispBody')||{}).value || '').trim();
+  const statusVal = (document.getElementById('ntmDispStatus')||{}).value || '';
+  const assigneeVal = ((document.getElementById('ntmDispAssignee')||{}).value || '').trim();
+  const tenantVal = ((document.getElementById('ntmDispTenant')||{}).value || '').trim();
+  const priorityRaw = (document.getElementById('ntmDispPriority')||{}).value || '';
+  // Soft guard: Ready + Unassigned will sit forever (dispatcher skips it).
+  if (statusVal === 'ready' && !assigneeVal){
+    if (err && !err.dataset.warningShown){
+      err.textContent = t('kanban_ready_needs_assignee')
+        || 'You picked Unassigned + Ready. The dispatcher will skip this task. Submit again to confirm, or pick a profile.';
+      err.dataset.warningShown = '1';
+      return;
+    }
+  }
+  const payload = {title: titleVal};
+  if (bodyVal) payload.body = bodyVal;
+  if (statusVal) payload.status = statusVal;
+  if (assigneeVal) payload.assignee = assigneeVal;
+  if (tenantVal) payload.tenant = tenantVal;
+  if (priorityRaw !== '' && priorityRaw !== '0'){
+    const n = parseInt(priorityRaw, 10);
+    if (!Number.isNaN(n)) payload.priority = n;
+  }
+  if (submitBtn) submitBtn.disabled = true;
+  if (err){ err.textContent = ''; delete err.dataset.warningShown; }
+  try {
+    const saved = await api('/api/kanban/tasks' + _kanbanBoardQuery(), {method:'POST', body: JSON.stringify(payload)});
+    closeNewTaskModal();
+    if (typeof switchPanel === 'function' && _currentPanel !== 'kanban') await switchPanel('kanban'); else await loadKanban(true);
+    const id = saved && saved.task && saved.task.id;
+    if (id) await loadKanbanTask(id);
+  } catch(e){
+    if (err) err.textContent = (e.message || String(e));
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+async function _ntmSubmitScheduled(){
+  const err = document.getElementById('ntmError');
+  const submitBtn = document.getElementById('ntmSubmit');
+  const name = ((document.getElementById('ntmSchedName')||{}).value || '').trim();
+  const schedule = ((document.getElementById('ntmSchedSchedule')||{}).value || '').trim();
+  const prompt = ((document.getElementById('ntmSchedPrompt')||{}).value || '').trim();
+  const deliver = (document.getElementById('ntmSchedDeliver')||{}).value || 'local';
+  const profile = (document.getElementById('ntmSchedProfile')||{}).value || '';
+  const toast = !!((document.getElementById('ntmSchedToast')||{}).checked);
+  if (err) err.textContent = '';
+  if (!schedule){ if (err) err.textContent = t('cron_schedule_required_example') || 'A schedule is required.'; return; }
+  if (!prompt){ if (err) err.textContent = t('cron_prompt_required') || 'A prompt is required.'; return; }
+  const body = {schedule, prompt, deliver, profile, toast_notifications: toast};
+  if (name) body.name = name;
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const res = await api('/api/crons/create', {method:'POST', body: JSON.stringify(body)});
+    closeNewTaskModal();
+    showToast(t('cron_job_created') || 'Scheduled task created');
+    // Refresh the Board's Scheduled lane if we're on it, else just refresh cron cache.
+    if (_currentPanel === 'kanban') { await _loadKanbanScheduled(); _kanbanRenderBoard(); }
+    const newId = res && (res.id || (res.job && res.job.id));
+    if (newId){ await switchPanel('tasks'); if (typeof openCronDetail === 'function') openCronDetail(newId); }
+  } catch(e){
+    if (err) err.textContent = (e.message || String(e));
     if (submitBtn) submitBtn.disabled = false;
   }
 }

@@ -160,10 +160,11 @@
 
     <div class="sidebar-nav">
       <button class="nav-tab active has-tooltip has-tooltip--bottom" data-panel="chat" data-label="Chat" onclick="switchPanel('chat',{fromRailClick:true})" data-tooltip="Chat" data-i18n-title="tab_chat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
-      <button class="nav-tab has-tooltip has-tooltip--bottom" data-panel="tasks" data-label="Tasks" onclick="switchPanel('tasks',{fromRailClick:true})" data-tooltip="Tasks" data-i18n-title="tab_tasks"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
-      <button class="nav-tab has-tooltip has-tooltip--bottom" data-panel="kanban" data-label="Kanban" onclick="switchPanel('kanban',{fromRailClick:true})" data-tooltip="Kanban" data-i18n-title="tab_kanban"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M3 10h18"/></svg></button>
+      <button class="nav-tab has-tooltip has-tooltip--bottom" data-panel="kanban" data-label="Board" onclick="switchPanel('kanban',{fromRailClick:true})" data-tooltip="Board" data-i18n-title="kanban_board"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M3 10h18"/></svg></button>
       <button class="nav-tab has-tooltip has-tooltip--bottom" data-panel="agents" data-label="Agents" onclick="switchPanel('agents',{fromRailClick:true})" data-tooltip="Agents" data-i18n-title="tab_agents"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
       <button class="nav-tab dashboard-link has-tooltip has-tooltip--bottom" id="dashboardMobileBtn" data-dashboard-link data-label="Dashboard" style="display:none" onclick="openHermesDashboard(event)" data-tooltip="Hermes Dashboard" data-i18n-title="tab_dashboard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg><span class="dashboard-external-badge" aria-hidden="true"></span></button>
+      <!-- Merged task-creation button: opens the unified New Task modal (scheduled vs dispatcher). -->
+      <button class="nav-tab dock-new-task has-tooltip has-tooltip--bottom" type="button" onclick="openNewTaskModal()" data-tooltip="New task" data-i18n-title="new_task_title" aria-label="New task"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
       <!-- Settings button mirrored here for mobile (rail is desktop-only via @media >=768px). Keep in sync with rail entry. -->
       <button class="nav-tab has-tooltip has-tooltip--bottom" data-panel="settings" onclick="switchPanel('settings',{fromRailClick:true})" data-tooltip="Settings" data-i18n-title="tab_settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </div>
@@ -195,9 +196,8 @@
     <!-- Kanban panel -->
     <div class="panel-view" id="panelKanban">
       <div class="panel-head">
-        <span data-i18n="tab_kanban">Kanban</span>
+        <span data-i18n="kanban_board">Board</span>
         <div class="panel-head-actions">
-          <button class="panel-head-btn has-tooltip has-tooltip--bottom" id="kanbanNewTaskBtn" onclick="openKanbanCreate()" data-tooltip="New task" data-i18n-title="kanban_new_task" aria-label="New task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
           <button class="panel-head-btn has-tooltip has-tooltip--bottom" id="kanbanRefreshBtn" onclick="loadKanban(true)" data-tooltip="Refresh" data-i18n-title="kanban_refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
         </div>
       </div>
@@ -213,10 +213,6 @@
           <button class="btn secondary" onclick="bulkUpdateKanban()" data-i18n="kanban_bulk_action">Bulk action</button>
           <button class="btn secondary kanban-nudge-dispatch-btn" onclick="nudgeKanbanDispatcher()" data-i18n="kanban_nudge_dispatcher" title="Dry-run: shows what would be claimed without spawning workers">Preview</button>
           <button class="btn primary kanban-run-dispatch-btn" onclick="runKanbanDispatcher()" data-i18n="kanban_run_dispatcher" title="Claims Ready tasks and spawns worker subprocesses">Run dispatcher</button>
-        </div>
-        <div class="kanban-new-task-row">
-          <input id="kanbanNewTaskTitle" placeholder="New task" data-i18n-placeholder="kanban_new_task" onkeydown="if(event.key==='Enter')createKanbanTask()">
-          <button class="btn secondary" onclick="createKanbanTask()" data-i18n="kanban_new_task">New task</button>
         </div>
       </div>
       <div class="kanban-summary" id="kanbanSummary"></div>
@@ -1533,14 +1529,104 @@
     </div>
   </div>
 </div>
+<!-- Unified New Task modal — toggles between a scheduled (cron) task and a
+     dispatcher (kanban) task. Opened from the dock's merged "New task" button.
+     Scheduled submit -> POST /api/crons/create; dispatcher submit -> POST /api/kanban/tasks. -->
+<div class="kanban-modal-overlay" id="newTaskModal" hidden onclick="if(event.target===this)closeNewTaskModal()">
+  <div class="kanban-modal ntm-modal" role="dialog" aria-modal="true" aria-labelledby="ntmTitle">
+    <h3 id="ntmTitle" data-i18n="new_task_title">New task</h3>
+    <div class="ntm-toggle" role="tablist" aria-label="Task type">
+      <button type="button" id="ntmTabDispatcher" class="ntm-toggle-btn active" role="tab" aria-selected="true" onclick="_ntmSetType('dispatcher')">
+        <span class="ntm-toggle-label" data-i18n="new_task_dispatcher">Dispatcher task</span>
+        <span class="ntm-toggle-sub" data-i18n="new_task_dispatcher_sub">Work item the dispatcher claims</span>
+      </button>
+      <button type="button" id="ntmTabScheduled" class="ntm-toggle-btn" role="tab" aria-selected="false" onclick="_ntmSetType('scheduled')">
+        <span class="ntm-toggle-label" data-i18n="new_task_scheduled">Scheduled task</span>
+        <span class="ntm-toggle-sub" data-i18n="new_task_scheduled_sub">Runs on a cron / interval</span>
+      </button>
+    </div>
+
+    <!-- Dispatcher (kanban) pane -->
+    <div class="ntm-pane" id="ntmPaneDispatcher">
+      <div class="kanban-modal-row">
+        <label for="ntmDispTitle" data-i18n="kanban_title">Title</label>
+        <input type="text" id="ntmDispTitle" maxlength="500" autocomplete="off" required>
+      </div>
+      <div class="kanban-modal-row">
+        <label for="ntmDispBody" data-i18n="kanban_description">Description</label>
+        <textarea id="ntmDispBody" rows="4" data-i18n-placeholder="kanban_description_placeholder" placeholder="Optional — what needs to happen, acceptance criteria, links"></textarea>
+      </div>
+      <div class="kanban-modal-row-inline">
+        <div class="kanban-modal-row">
+          <label for="ntmDispStatus" data-i18n="kanban_status">Status</label>
+          <select id="ntmDispStatus">
+            <option value="triage" data-i18n="kanban_status_triage">Triage</option>
+            <option value="todo" data-i18n="kanban_status_todo">Todo</option>
+            <option value="ready" selected data-i18n="kanban_status_ready">Ready</option>
+          </select>
+        </div>
+        <div class="kanban-modal-row">
+          <label for="ntmDispPriority" data-i18n="kanban_priority">Priority</label>
+          <input type="number" id="ntmDispPriority" value="0" min="-100" max="100" step="1">
+        </div>
+      </div>
+      <div class="kanban-modal-row">
+        <label for="ntmDispAssignee" data-i18n="kanban_assignee">Assignee</label>
+        <select id="ntmDispAssignee"></select>
+        <div class="kanban-modal-hint" data-i18n="kanban_assignee_hint">Pick a Hermes profile so the dispatcher can claim and run this task. Tasks left as <em>Unassigned</em> will sit in Ready forever.</div>
+      </div>
+      <div class="kanban-modal-row">
+        <label for="ntmDispTenant" data-i18n="kanban_tenant">Tenant</label>
+        <input type="text" id="ntmDispTenant" maxlength="64" autocomplete="off" data-i18n-placeholder="kanban_tenant_placeholder" placeholder="Optional — project or team slug">
+      </div>
+    </div>
+
+    <!-- Scheduled (cron) pane -->
+    <div class="ntm-pane" id="ntmPaneScheduled" hidden>
+      <div class="kanban-modal-row">
+        <label for="ntmSchedName" data-i18n="cron_name_label">Name</label>
+        <input type="text" id="ntmSchedName" autocomplete="off" data-i18n-placeholder="cron_name_placeholder" placeholder="Optional">
+      </div>
+      <div class="kanban-modal-row">
+        <label for="ntmSchedSchedule" data-i18n="cron_schedule_label">Schedule</label>
+        <input type="text" id="ntmSchedSchedule" autocomplete="off" required placeholder="0 9 * * *  —  every 1h  —  @daily">
+        <div class="kanban-modal-hint" data-i18n="cron_schedule_hint">Cron expression or shorthand like 'every 1h'.</div>
+        <div id="ntmSchedOnceWarning" class="kanban-modal-error ntm-once-warning" style="display:none" data-i18n="cron_schedule_once_warning">Duration forms like '30m' run once and are removed after running. Use 'every 30m' to keep a recurring job.</div>
+      </div>
+      <div class="kanban-modal-row">
+        <label for="ntmSchedPrompt" data-i18n="cron_prompt_label">Prompt</label>
+        <textarea id="ntmSchedPrompt" rows="5" data-i18n-placeholder="cron_prompt_placeholder" placeholder="Must be self-contained" required></textarea>
+      </div>
+      <div class="kanban-modal-row-inline">
+        <div class="kanban-modal-row">
+          <label for="ntmSchedDeliver" data-i18n="cron_deliver_label">Deliver output to</label>
+          <select id="ntmSchedDeliver"><option value="" disabled>loading...</option></select>
+        </div>
+        <div class="kanban-modal-row">
+          <label for="ntmSchedProfile" data-i18n="cron_profile_label">Profile</label>
+          <select id="ntmSchedProfile"></select>
+        </div>
+      </div>
+      <div class="kanban-modal-row">
+        <label class="ntm-check" for="ntmSchedToast"><input type="checkbox" id="ntmSchedToast" checked> <span data-i18n="cron_toast_notifications_hint">Show a toast when this cron finishes.</span></label>
+      </div>
+    </div>
+
+    <div class="kanban-modal-error" id="ntmError" aria-live="polite"></div>
+    <div class="kanban-modal-actions">
+      <button type="button" class="btn secondary" onclick="closeNewTaskModal()" data-i18n="cancel">Cancel</button>
+      <button type="button" class="btn primary" id="ntmSubmit" onclick="submitNewTaskModal()" data-i18n="create">Create</button>
+    </div>
+  </div>
+</div>
 <!-- Conversation Outline Panel (#2124): floating jump-to-question panel -->
 <nav class="rail" aria-label="Primary navigation">
   <button class="rail-btn nav-tab active has-tooltip" data-panel="chat" onclick="switchPanel('chat',{fromRailClick:true})" data-tooltip="Chat" data-i18n-title="tab_chat" aria-label="Chat"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
-  <button class="rail-btn nav-tab has-tooltip" data-panel="tasks" onclick="switchPanel('tasks',{fromRailClick:true})" data-tooltip="Tasks" data-i18n-title="tab_tasks" aria-label="Tasks"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
-  <button class="rail-btn nav-tab has-tooltip" data-panel="kanban" onclick="switchPanel('kanban',{fromRailClick:true})" data-tooltip="Kanban" data-i18n-title="tab_kanban" aria-label="Kanban"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M3 10h18"/></svg></button>
+  <button class="rail-btn nav-tab has-tooltip" data-panel="kanban" onclick="switchPanel('kanban',{fromRailClick:true})" data-tooltip="Board" data-i18n-title="kanban_board" aria-label="Board"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M3 10h18"/></svg></button>
   <button class="rail-btn nav-tab has-tooltip" data-panel="agents" onclick="switchPanel('agents',{fromRailClick:true})" data-tooltip="Agents" data-i18n-title="tab_agents" aria-label="Agents"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
   <button class="rail-btn nav-tab dashboard-link has-tooltip" id="dashboardRailBtn" data-dashboard-link style="display:none" onclick="openHermesDashboard(event)" data-tooltip="Hermes Dashboard" data-i18n-title="tab_dashboard" aria-label="Hermes Dashboard"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg><span class="dashboard-external-badge" aria-hidden="true"></span></button>
   <div class="rail-divider" aria-hidden="true"></div>
+  <button class="rail-btn nav-tab dock-new-task has-tooltip" type="button" onclick="openNewTaskModal()" data-tooltip="New task" data-i18n-title="new_task_title" aria-label="New task"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
   <button class="rail-btn nav-tab has-tooltip" data-panel="settings" onclick="switchPanel('settings',{fromRailClick:true})" data-tooltip="Settings" data-i18n-title="tab_settings" aria-label="Settings"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 </nav>
 <!-- Flash-prevention: apply hidden tab visibility from localStorage synchronously
