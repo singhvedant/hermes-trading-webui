@@ -245,18 +245,14 @@ async function switchPanel(name, opts = {}) {
   const nextPanel = name || 'chat';
   const prevPanel = _currentPanel;
   // ── Desktop sidebar collapse toggle (rail-click only) ──
-  // If the click came from a rail icon AND we're on desktop, the rail icon
-  // does double duty: clicking the already-active panel collapses the sidebar;
-  // clicking any panel while collapsed expands first. Programmatic switches
-  // (no opts.fromRailClick) are unaffected so legacy callers preserve
-  // behaviour exactly.
+  // The sidebar defaults to closed and dock clicks never auto-expand it
+  // (use the edge-toggle handle to open it manually). The rail icon still
+  // does double duty for the already-open case: clicking the already-active
+  // panel collapses the sidebar. Programmatic switches (no opts.fromRailClick)
+  // are unaffected so legacy callers preserve behaviour exactly.
   if (opts.fromRailClick && typeof _isSidebarCollapsed === 'function'
       && typeof _isDesktopWidth === 'function' && _isDesktopWidth()) {
-    if (_isSidebarCollapsed()) {
-      // Expand first, then continue to the normal panel switch below so
-      // the clicked panel becomes (or stays) active in the same gesture.
-      expandSidebar();
-    } else if (prevPanel === nextPanel) {
+    if (!_isSidebarCollapsed() && prevPanel === nextPanel) {
       // Same panel clicked while sidebar is open → collapse and short-circuit.
       // Skip the guard/cleanup work below; nothing about the active panel
       // is changing, only the visibility of the panel container.
@@ -281,11 +277,15 @@ async function switchPanel(name, opts = {}) {
   } else if (prevPanel !== 'chat' && nextPanel === 'chat') {
     const restoreMode = _workspacePanelModeBeforeChatLeave;
     _workspacePanelModeBeforeChatLeave = null;
-    if (restoreMode && restoreMode !== 'closed' && typeof openWorkspacePanel === 'function') {
+    // Dock-clicking into chat always lands on the closed default; only
+    // restore a prior open workspace panel for non-dock (programmatic) switches.
+    if (!opts.fromRailClick && restoreMode && restoreMode !== 'closed' && typeof openWorkspacePanel === 'function') {
       openWorkspacePanel(restoreMode);
     }
   }
   _currentPanel = nextPanel;
+  // Reflow the primary dock: merged-into-composer on chat, floating pill elsewhere.
+  _syncDockPlacement(nextPanel);
   // Update nav tabs (rail + mobile sidebar-nav share data-panel)
   document.querySelectorAll('[data-panel]').forEach(t => t.classList.toggle('active', t.dataset.panel === nextPanel));
   // Refresh aria-expanded on the newly-active rail button to mirror sidebar state.
@@ -322,6 +322,35 @@ async function switchPanel(name, opts = {}) {
   if (nextPanel === 'chat' && typeof syncTopbar === 'function') syncTopbar();
   else syncAppTitlebar();
   return true;
+}
+
+// ── Fluid dock placement ──
+// The single primary nav dock (`.rail`) lives in two homes depending on the
+// active panel. On the chat/session page it is reparented INTO the composer
+// (`#composerWrap`) as an in-flow footer so it aligns to the composer width and
+// the two read as one unit divided by a single hairline. On every other panel
+// it floats as a blended pill fixed to the bottom-centre of the viewport.
+// Reparenting (rather than duplicating) keeps one set of nav buttons, so the
+// existing active-state toggling and tab-reorder logic keep working untouched.
+function _syncDockPlacement(panel) {
+  const rail = document.querySelector('.rail');
+  if (!rail) return;
+  document.body.dataset.panel = panel;
+  const composerWrap = document.getElementById('composerWrap');
+  if (panel === 'chat' && composerWrap) {
+    if (rail.parentElement !== composerWrap) composerWrap.appendChild(rail);
+    rail.classList.add('rail-merged');
+  } else {
+    rail.classList.remove('rail-merged');
+    if (rail.parentElement !== document.body) document.body.appendChild(rail);
+  }
+}
+// Place the dock correctly on first paint (the default panel is chat and
+// switchPanel is not necessarily called on load).
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => _syncDockPlacement(_currentPanel), { once: true });
+} else {
+  _syncDockPlacement(_currentPanel);
 }
 
 // ── Cron panel ──
@@ -7352,22 +7381,6 @@ async function loadSettingsPanel(){
       };
     }
     if(typeof _applySessionNavigationPrefs==='function') _applySessionNavigationPrefs();
-    // Workspace panel default-open toggle (localStorage-backed)
-    // Uses a separate key (hermes-webui-workspace-panel-pref) so that
-    // closing the panel via toolbar X does not clear the user's preference.
-    const wsPanelCb=$('settingsWorkspacePanelOpen');
-    if(wsPanelCb){
-      wsPanelCb.checked=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open';
-      wsPanelCb.onchange=function(){
-        const open=this.checked;
-        localStorage.setItem('hermes-webui-workspace-panel-pref',open?'open':'closed');
-        // Also sync the runtime key so the current session reflects the change
-        localStorage.setItem('hermes-webui-workspace-panel',open?'open':'closed');
-        document.documentElement.dataset.workspacePanel=open?'open':'closed';
-        if(open&&_workspacePanelMode==='closed') openWorkspacePanel('browse');
-        else if(!open&&_workspacePanelMode!=='closed') toggleWorkspacePanel(false);
-      };
-    }
     const endlessScrollCb=$('settingsSessionEndlessScroll');
     if(endlessScrollCb){
       endlessScrollCb.checked=!!settings.session_endless_scroll;

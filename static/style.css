@@ -1430,7 +1430,12 @@
   .clarify-card.collapsed .clarify-header{margin-bottom:0;}
   .clarify-card.collapsed .clarify-question,.clarify-card.collapsed .clarify-choices,.clarify-card.collapsed .clarify-response,.clarify-card.collapsed .clarify-hint{display:none;}
   /* Bottom dock (macOS-style primary navigation) */
-  .rail{display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:200;flex-direction:row;align-items:flex-end;gap:6px;padding:10px 16px;background:color-mix(in srgb,var(--sidebar) 72%,transparent);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);border:1px solid var(--border2);border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.28),0 2px 8px rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.06) inset;width:auto;flex-shrink:0;}
+  /* Blended floating pill: shares the page background so it reads as part of
+     the page rather than a detached macOS-style island. No backdrop blur, no
+     heavy drop shadow, just a hairline border + a whisper of lift. The chat
+     page overrides this entirely (.rail-merged) to fuse the dock with the
+     composer. */
+  .rail{display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:200;flex-direction:row;align-items:flex-end;gap:6px;padding:10px 16px;background:var(--bg);border:1px solid var(--border);border-radius:18px;box-shadow:0 1px 3px rgba(0,0,0,.06);width:auto;flex-shrink:0;}
   .rail-btn{width:48px;height:48px;border-radius:12px;border:none;background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;transition:color .15s,background .15s,transform .18s cubic-bezier(.34,1.56,.64,1);flex-shrink:0;padding:0;}
   .rail-btn:hover{color:var(--text);background:var(--hover-bg);transform:translateY(-8px) scale(1.22);}
   .rail-btn.active{color:var(--accent-text);background:var(--accent-bg);}
@@ -1482,8 +1487,34 @@
   .dashboard-external-badge::after{content:'';position:absolute;right:-2px;top:-2px;width:5px;height:5px;border-top:1.5px solid var(--accent);border-right:1.5px solid var(--accent);}
   .sidebar-nav .dashboard-external-badge{right:8px;top:7px;width:8px;height:8px;}
   @media(min-width:641px){.rail{display:flex;}.sidebar > .sidebar-nav{display:none;}}
-  /* Add bottom padding to layout so content isn't obscured by the dock */
-  @media(min-width:641px){.layout{padding-bottom:80px;}}
+  /* Board/Agents/Settings pages: content flows full-height behind the floating
+     dock (like the chat page does) instead of the layout reserving dead space
+     below it. Clearance lives on each page's own scroll container instead, so
+     the user can scroll content a bit past the dock's top edge. */
+  @media(min-width:641px){
+    .kanban-board-wrap,
+    .main-view-body,
+    #mainSettings{padding-bottom:96px!important;scroll-padding-bottom:96px;}
+  }
+  /* ── Chat/session page: dock fuses with the composer into one unit ── */
+  /* The dock is reparented into #composerWrap (see _syncDockPlacement) and
+     becomes an in-flow footer the same width as the composer box. They stack
+     flush; the composer box's bottom border is the single "sleek horizontal
+     line" dividing input from nav. */
+  .rail.rail-merged{position:static;transform:none;left:auto;bottom:auto;display:none;width:100%;max-width:clamp(780px,60vw,1100px);margin:0 auto;padding:7px 16px;justify-content:center;align-items:center;background:var(--bg);border:1px solid var(--border2);border-top:none;border-radius:0 0 16px 16px;box-shadow:none;}
+  @media(min-width:641px){.rail.rail-merged{display:flex;}}
+  @media(min-width:1600px){.rail.rail-merged{max-width:1600px;}}
+  /* Tame the icon hover-lift so it doesn't punch across the divider into the composer. */
+  .rail-merged .rail-btn:hover{transform:translateY(-4px) scale(1.1);}
+  /* Square off the composer's bottom corners so it locks onto the dock, drop
+     the inter-element gap, and remove the fixed-dock clearance (the dock is now
+     in-flow). Desktop-only: on mobile the dock stays hidden and the composer
+     keeps its normal rounded, padded look. */
+  @media(min-width:641px){
+    body[data-panel="chat"] .composer-box{border-radius:16px 16px 0 0;}
+    body[data-panel="chat"] .composer-wrap{padding-bottom:0;}
+    body[data-panel="chat"] .layout{padding-bottom:0;}
+  }
   /* Sidebar navigation tabs */
   .sidebar-nav{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;padding:6px 8px 0;gap:2px;}
   .nav-tab{flex:1;padding:10px 4px 8px;font-size:20px;text-align:center;cursor:pointer;color:var(--muted);border:none;background:none;transition:color .15s;border-bottom:2px solid transparent;white-space:nowrap;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;}
@@ -2149,6 +2180,10 @@
   .workspace-panel-edge-toggle{position:fixed;right:10px;top:50%;transform:translateY(-50%) translateX(12px);z-index:120;width:34px;height:44px;border:1px solid var(--border2);border-radius:999px;background:var(--surface);color:var(--muted);box-shadow:0 10px 28px rgba(0,0,0,.22);display:none;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease,color .15s ease,background .15s ease,border-color .15s ease;}
   .workspace-panel-edge-toggle:hover{color:var(--text);background:var(--hover-bg);border-color:var(--accent);}
   .workspace-panel-edge-toggle:disabled{opacity:.3;cursor:not-allowed;transform:translateY(-50%);}
+  /* Left-edge twin of the workspace toggle: reopens the collapsed session
+     sidebar. Mirrored horizontally (anchored left, hidden until collapsed). */
+  .sidebar-edge-toggle{position:fixed;left:10px;top:50%;transform:translateY(-50%) translateX(-12px);z-index:120;width:34px;height:44px;border:1px solid var(--border2);border-radius:999px;background:var(--surface);color:var(--muted);box-shadow:0 10px 28px rgba(0,0,0,.22);display:none;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease,color .15s ease,background .15s ease,border-color .15s ease;}
+  .sidebar-edge-toggle:hover{color:var(--text);background:var(--hover-bg);border-color:var(--accent);}
   /* Small accent dot on the kebab button when a non-default pref is on */
   #btnWorkspacePrefs{position:relative;}
   #btnWorkspacePrefs .workspace-prefs-dot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--accent-text);box-shadow:0 0 0 1.5px var(--surface);pointer-events:none;}
@@ -2249,6 +2284,12 @@
     html[data-workspace-panel="closed"] .workspace-panel-edge-toggle{display:inline-flex;opacity:1;pointer-events:auto;transform:translateY(-50%);}
     html[data-workspace-panel="open"] .workspace-panel-edge-toggle{display:none;}
   }
+  /* The workspace/file-browser panel is chat-only. Hide it (and its edge
+     handle) outright on every other page regardless of _workspacePanelMode,
+     so a stray re-open call elsewhere can never leak it onto Board/Agents/
+     Settings/Tasks/etc. */
+  body[data-panel]:not([data-panel="chat"]) .rightpanel,
+  body[data-panel]:not([data-panel="chat"]) .workspace-panel-edge-toggle{display:none!important;}
 
   /* Sidebar collapse breakpoint matches `_isDesktopWidth()` (min-width:641px) so
      clicking the active rail icon in the tablet-portrait band (641–900px) actually
@@ -2267,6 +2308,13 @@
        <html> BEFORE the stylesheet loads, so the collapsed state paints from
        frame 0 with zero flicker on cold loads. boot.js clears it once JS owns the state. */
     html[data-sidebar-collapsed="1"] .sidebar:not(.mobile-open){width:0 !important;min-width:0;opacity:0;transform:translateX(-14px);border-right-color:transparent;pointer-events:none;overflow:hidden;transition:none;}
+    /* Reveal the left-edge reopen handle whenever the sidebar is collapsed —
+       via the persisted JS class or the pre-paint flash-prevention dataset. */
+    .layout.sidebar-collapsed .sidebar-edge-toggle,
+    html[data-sidebar-collapsed="1"] .sidebar-edge-toggle{display:inline-flex;opacity:1;pointer-events:auto;transform:translateY(-50%);}
+  }
+  @media(max-width:640px){
+    .sidebar-edge-toggle{display:none!important;}
   }
 
   @media(max-width:900px){

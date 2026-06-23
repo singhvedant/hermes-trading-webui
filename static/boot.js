@@ -380,7 +380,11 @@ function expandSidebar(){
   try{document.documentElement.removeAttribute('data-sidebar-collapsed');}catch(_){}
   if(!_isDesktopWidth())return;
   try{
-    if(localStorage.getItem(_SIDEBAR_COLLAPSED_KEY)==='1'){
+    // Collapsed by default: the session sidebar starts closed unless the user
+    // has explicitly opened it (persisted '0'). A null value (first visit)
+    // counts as collapsed, mirroring the right workspace panel's closed default.
+    const v=localStorage.getItem(_SIDEBAR_COLLAPSED_KEY);
+    if(v==='1'||v===null){
       const layout=document.querySelector('.layout');
       if(layout)layout.classList.add('sidebar-collapsed');
     }
@@ -2180,8 +2184,7 @@ function applyBotName(){
         S._bootReady=true;
         // Restore panel pref before syncing so the workspace panel stays visible
         // even though there is no active session (#workspace-persist).
-        const _ephPanelPref=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open'
-          || localStorage.getItem('hermes-webui-workspace-panel')==='open';
+        const _ephPanelPref=localStorage.getItem('hermes-webui-workspace-panel')==='open';
         if(_ephPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';
         syncTopbar();syncWorkspacePanelState();
         $('emptyState').style.display='';
@@ -2191,8 +2194,7 @@ function applyBotName(){
       // Restore the panel from localStorage when the session has a workspace.
       // Preference key takes priority over runtime state so that closing
       // the panel via toolbar X doesn't suppress the "keep open" setting.
-      const panelPref=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open'
-        || localStorage.getItem('hermes-webui-workspace-panel')==='open';
+      const panelPref=localStorage.getItem('hermes-webui-workspace-panel')==='open';
       if(S.session&&S.session.workspace&&panelPref&&!_isCompactWorkspaceViewport()){
         _workspacePanelMode='browse';
       }
@@ -2205,8 +2207,7 @@ function applyBotName(){
   syncTopbar();
   // Restore panel pref so the workspace panel stays visible on a fresh load if the
   // user had it open during their last session (#workspace-persist).
-  const _freshPanelPref=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open'
-    || localStorage.getItem('hermes-webui-workspace-panel')==='open';
+  const _freshPanelPref=localStorage.getItem('hermes-webui-workspace-panel')==='open';
   if(_freshPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';
   syncWorkspacePanelState();
   $('emptyState').style.display='';
@@ -2265,7 +2266,8 @@ window.addEventListener('pageshow', async (event) => {
   // frozen DOM but another tab may have toggled the sidebar in the meantime.
   if (typeof _isSidebarCollapsed === 'function' && typeof toggleSidebar === 'function') {
     try {
-      const _want = localStorage.getItem('hermes-webui-sidebar-collapsed') === '1';
+      const _raw = localStorage.getItem('hermes-webui-sidebar-collapsed');
+      const _want = _raw === '1' || _raw === null; // null = collapsed by default
       const _have = _isSidebarCollapsed();
       if (_want !== _have) toggleSidebar(_want);
       if (typeof _syncSidebarAria === 'function') _syncSidebarAria();
