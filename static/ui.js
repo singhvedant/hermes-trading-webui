@@ -6262,9 +6262,12 @@ function _todosHash(items){
 }
 
 function _todosPanelIsActive(){
+  // The sidebar todos panel is gone — the workspace right-panel "Todos" tab
+  // (inside the session panel) is now the sole todos surface, so live
+  // pushes should paint there whenever that tab is selected.
   if(typeof document==='undefined') return false;
-  const panel=document.getElementById('panelTodos');
-  return !!(panel&&panel.classList&&panel.classList.contains('active'));
+  const tab=document.getElementById('workspaceTodosTab');
+  return !!(tab&&tab.classList&&tab.classList.contains('active'));
 }
 
 function scheduleTodosRefresh(){
@@ -6274,12 +6277,14 @@ function scheduleTodosRefresh(){
   if(_todosRenderRafId) return;
   if(typeof requestAnimationFrame!=='function'){
     if(typeof loadTodos==='function') loadTodos();
+    if(typeof _loadWorkspacePanelTodos==='function') _loadWorkspacePanelTodos();
     return;
   }
   _todosRenderRafId=requestAnimationFrame(()=>{
     _todosRenderRafId=0;
     if(!_todosPanelIsActive()) return;
     if(typeof loadTodos==='function') loadTodos();
+    if(typeof _loadWorkspacePanelTodos==='function') _loadWorkspacePanelTodos();
   });
 }
 
@@ -9951,7 +9956,7 @@ function renderMessages(options){
       _updateMessageVirtualMeasurements(renderVisWithIdx, renderVisibleIdxs, virtualWindow);
       requestAnimationFrame(()=>postProcessRenderedMessages(inner));
       if(typeof _initMediaPlaybackObserver==='function') _initMediaPlaybackObserver();
-      if(typeof loadTodos==='function'&&document.getElementById('panelTodos')&&document.getElementById('panelTodos').classList.contains('active')){loadTodos();}
+      if(typeof scheduleTodosRefresh==='function') scheduleTodosRefresh();
       return;
     }
   }
@@ -11108,10 +11113,8 @@ function renderMessages(options){
   if(_maybeRecoverVirtualizedBlankViewport(options, preserveScroll, virtualWindow)) return;
   // Apply syntax highlighting after DOM is built
   requestAnimationFrame(()=>postProcessRenderedMessages(inner));
-  // Refresh todo panel if it's currently open
-  if(typeof loadTodos==='function' && document.getElementById('panelTodos') && document.getElementById('panelTodos').classList.contains('active')){
-    loadTodos();
-  }
+  // Refresh todos if the workspace panel's Todos tab is currently open
+  if(typeof scheduleTodosRefresh==='function') scheduleTodosRefresh();
   // Apply persisted playback speed after media nodes are rendered.
   if(typeof _applyMediaPlaybackPreferences==='function') _applyMediaPlaybackPreferences(inner);
   // Populate session cache so switching back here skips a full rebuild.

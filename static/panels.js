@@ -267,6 +267,18 @@ async function switchPanel(name, opts = {}) {
   if (prevPanel === 'kanban' && nextPanel !== 'kanban') {
     if (typeof _kanbanStopPolling === 'function') _kanbanStopPolling();
   }
+  // The right (session) panel is chat-only: leaving chat force-closes it
+  // (remembering whatever mode it was in), returning to chat restores it.
+  if (prevPanel === 'chat' && nextPanel !== 'chat') {
+    _workspacePanelModeBeforeChatLeave = _workspacePanelMode;
+    if (typeof closeWorkspacePanel === 'function') closeWorkspacePanel();
+  } else if (prevPanel !== 'chat' && nextPanel === 'chat') {
+    const restoreMode = _workspacePanelModeBeforeChatLeave;
+    _workspacePanelModeBeforeChatLeave = null;
+    if (restoreMode && restoreMode !== 'closed' && typeof openWorkspacePanel === 'function') {
+      openWorkspacePanel(restoreMode);
+    }
+  }
   _currentPanel = nextPanel;
   // Update nav tabs (rail + mobile sidebar-nav share data-panel)
   document.querySelectorAll('[data-panel]').forEach(t => t.classList.toggle('active', t.dataset.panel === nextPanel));
@@ -280,14 +292,13 @@ async function switchPanel(name, opts = {}) {
   // showing-<name> class on <main>; no class means chat (the default).
   const mainEl = document.querySelector('main.main');
   if (mainEl) {
-    ['settings','tasks','kanban','workspaces','agents','plugin'].forEach(p => {
+    ['settings','tasks','kanban','agents','plugin'].forEach(p => {
       mainEl.classList.toggle('showing-' + p, nextPanel === p);
     });
   }
   // Lazy-load panel data
   if (nextPanel === 'tasks') await loadCrons();
   if (nextPanel === 'kanban') await loadKanban();
-  if (nextPanel === 'workspaces') await loadWorkspacesPanel();
   if (nextPanel === 'agents') { await loadProfilesPanel(); await loadMemory(); await loadSkills(); }
   if (nextPanel === 'todos') loadTodos();
   if (typeof _syncSystemHealthMonitorVisibility === 'function') _syncSystemHealthMonitorVisibility();
@@ -4773,6 +4784,16 @@ function syncWorkspaceDisplays(){
   }
 }
 
+function toggleSpacesSection(force){
+  const section=$('rightpanelSpaces');
+  const toggleBtn=$('spacesSectionToggle');
+  if(!section) return;
+  const next=typeof force==='boolean'?force:!section.classList.contains('expanded');
+  section.classList.toggle('expanded',next);
+  if(toggleBtn) toggleBtn.setAttribute('aria-expanded',next?'true':'false');
+  if(next) loadWorkspacesPanel();
+}
+
 async function loadWorkspaceList(){
   try{
     const data = await api('/api/workspaces');
@@ -5108,6 +5129,7 @@ function _renderWorkspaceDetail(ws){
 
 function _setWorkspaceHeaderButtons(mode, ws){
   const actBtn = $('btnActivateWorkspaceDetail');
+  const deactBtn = $('btnDeactivateWorkspaceDetail');
   const editBtn = $('btnEditWorkspaceDetail');
   const delBtn = $('btnDeleteWorkspaceDetail');
   const cancelBtn = $('btnCancelWorkspaceDetail');
@@ -5118,21 +5140,54 @@ function _setWorkspaceHeaderButtons(mode, ws){
     const activePath = S.session ? S.session.workspace : '';
     const isActive = ws && ws.path === activePath;
     const isDefault = !!(ws && ws.is_default);
-    if (isActive) hide(actBtn); else show(actBtn);
+    if (isActive) {
+      hide(actBtn);
+      // Deactivating just means switching back to the default space —
+      // nothing to deactivate to if this already IS the default.
+      if (isDefault) hide(deactBtn); else show(deactBtn);
+    } else {
+      show(actBtn);
+      hide(deactBtn);
+    }
     show(editBtn);
     if (isDefault) hide(delBtn); else show(delBtn);
     hide(cancelBtn); hide(saveBtn);
   } else if (mode === 'create' || mode === 'edit') {
-    hide(actBtn); hide(editBtn); hide(delBtn); show(cancelBtn); show(saveBtn);
+    hide(actBtn); hide(deactBtn); hide(editBtn); hide(delBtn); show(cancelBtn); show(saveBtn);
   } else {
-    [actBtn, editBtn, delBtn, cancelBtn, saveBtn].forEach(hide);
+    [actBtn, deactBtn, editBtn, delBtn, cancelBtn, saveBtn].forEach(hide);
   }
+}
+
+function _workspaceDetailModalKey(ev){
+  if (ev.key === 'Escape') {
+    ev.preventDefault();
+    closeWorkspaceDetailModal();
+  }
+}
+
+function openWorkspaceDetailModal(){
+  const modal = $('workspaceDetailModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden', 'false');
+  document.addEventListener('keydown', _workspaceDetailModalKey);
+}
+
+function closeWorkspaceDetailModal(){
+  const modal = $('workspaceDetailModal');
+  if (modal) { modal.style.display = 'none'; modal.setAttribute('aria-hidden', 'true'); }
+  document.removeEventListener('keydown', _workspaceDetailModalKey);
+  closeWorkspacePathSuggestions();
+  _workspacePreFormDetail = null;
+  _clearWorkspaceDetail();
 }
 
 function openWorkspaceDetail(path, el){
   if (!_workspaceList) return;
   const ws = _workspaceList.find(w => w.path === path);
   if (!ws) return;
+  openWorkspaceDetailModal();
   document.querySelectorAll('.ws-row').forEach(e => e.classList.remove('active'));
   const target = el || document.querySelector(`.ws-row[data-path="${CSS.escape(path)}"]`);
   if (target) target.classList.add('active');
@@ -5155,8 +5210,17 @@ function _clearWorkspaceDetail(){
 async function activateCurrentWorkspace(){
   if (!_currentWorkspaceDetail) return;
   await switchToWorkspace(_currentWorkspaceDetail.path, _currentWorkspaceDetail.name);
-  // Re-render detail after activation so the active badge updates
-  _renderWorkspaceDetail(_currentWorkspaceDetail);
+  closeWorkspaceDetailModal();
+}
+
+async function deactivateCurrentWorkspace(){
+  if (!_currentWorkspaceDetail) return;
+  // There's no "no workspace" state server-side — deactivating the current
+  // space just means switching back to whichever space is flagged default.
+  const fallback = (_workspaceList || []).find(w => w.is_default);
+  if (!fallback) { showToast(t('workspace_no_default') || 'No default space configured'); return; }
+  await switchToWorkspace(fallback.path, fallback.name);
+  closeWorkspaceDetailModal();
 }
 
 async function deleteCurrentWorkspace(){
@@ -5174,7 +5238,7 @@ async function deleteCurrentWorkspace(){
 }
 
 function openWorkspaceCreate(){
-  if (typeof switchPanel === 'function' && _currentPanel !== 'workspaces') switchPanel('workspaces');
+  openWorkspaceDetailModal();
   _workspacePreFormDetail = _currentWorkspaceDetail ? { ..._currentWorkspaceDetail } : null;
   _workspaceMode = 'create';
   _renderWorkspaceForm({ name:'', path:'', isEdit:false });
@@ -5231,7 +5295,7 @@ function cancelWorkspaceForm(){
     _renderWorkspaceDetail(snap);
     return;
   }
-  _clearWorkspaceDetail();
+  closeWorkspaceDetailModal();
 }
 
 async function saveWorkspaceForm(){
@@ -6839,12 +6903,11 @@ function _rememberPreferencesSaved(payload){
 }
 
 function _applyWorkspaceTodosTabVisibility(){
+  // Todos no longer has a sidebar panel of its own — the workspace panel's
+  // Todos tab is the sole surface now, so it always stays visible
+  // regardless of the (now-inert) workspace_todos_tab preference.
   const tab=$('workspaceTodosTab');
-  if(tab) tab.hidden=!window._workspaceTodosTab;
-  const rp=document.querySelector('.rightpanel');
-  if(!window._workspaceTodosTab && rp && rp.dataset.activeTab==='todos'){
-    if(typeof switchWorkspacePanelTab==='function') switchWorkspacePanelTab('files');
-  }
+  if(tab) tab.hidden=false;
 }
 
 function _schedulePreferencesAutosave(){
@@ -7533,7 +7596,7 @@ async function switchPluginPage(event, path, label) {
   _currentPanel = 'plugin';
   const mainEl = document.querySelector('main.main');
   if (mainEl) {
-    ['settings','tasks','kanban','workspaces','agents','plugin'].forEach(p => {
+    ['settings','tasks','kanban','agents','plugin'].forEach(p => {
       mainEl.classList.toggle('showing-' + p, p === 'plugin');
     });
   }

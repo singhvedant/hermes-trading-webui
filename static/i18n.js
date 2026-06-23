@@ -761,7 +761,7 @@ const LOCALES = {
     remove: 'Remove',
     project_name_prompt: 'Project name:',
     // Sidebar & Tabs
-    tab_chat: 'Chat',
+    tab_chat: 'Session',
     tab_tasks: 'Tasks',
     tab_skills: 'Skills',
     tab_memory: 'Memory',
@@ -1336,6 +1336,8 @@ const LOCALES = {
     workspace_manage_meta: 'Open the Spaces panel',
     workspace_use_title: 'Use in current session',
     workspace_use: 'Use',
+    workspace_deactivate_title: 'Deactivate (switch to default space)',
+    workspace_no_default: 'No default space configured',
     workspace_add_path_placeholder: 'Add workspace path (e.g. /home/user/my-project)',
     workspace_paths_validated_hint: 'Paths are validated as existing directories before saving.',
 

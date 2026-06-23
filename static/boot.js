@@ -93,6 +93,7 @@ async function _savedSessionShouldStaySidebarOnly(sid){
 
 // ── Mobile navigation ──────────────────────────────────────────────────────
 let _workspacePanelMode='closed'; // 'closed' | 'browse' | 'preview'
+let _workspacePanelModeBeforeChatLeave=null; // remembers mode while away from the chat panel
 
 function _isCompactWorkspaceViewport(){
   return window.matchMedia('(max-width: 900px)').matches;
