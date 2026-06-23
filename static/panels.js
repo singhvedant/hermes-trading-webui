@@ -4249,7 +4249,15 @@ function _toggleCatCollapse(cat) {
 }
 
 function renderSkills(skills) {
-  const query = ($('skillsSearch').value || '').toLowerCase();
+  // The full skills browser (#skillsList/#skillsSearch) only exists in the
+  // standalone skills view, not in the agents profile panel. Bail out when it's
+  // absent so loadSkills() can still run _renderProfileInlineSkills() afterwards
+  // — otherwise a throw here aborted the refresh and left the inline panel
+  // showing the previously selected profile's skills (stale-state lag).
+  const searchEl = $('skillsSearch');
+  const box = $('skillsList');
+  if (!searchEl || !box) return;
+  const query = (searchEl.value || '').toLowerCase();
   const filtered = query ? skills.filter(s =>
     (s.name||'').toLowerCase().includes(query) ||
     (s.description||'').toLowerCase().includes(query) ||
@@ -4262,7 +4270,6 @@ function renderSkills(skills) {
     if (!cats[cat]) cats[cat] = [];
     cats[cat].push(s);
   }
-  const box = $('skillsList');
   box.innerHTML = '';
   if (!filtered.length) { box.innerHTML = `<div style="padding:12px;color:var(--muted);font-size:12px">${esc(t('skills_no_match'))}</div>`; return; }
   for (const [cat, items] of Object.entries(cats).sort()) {
@@ -4336,6 +4343,33 @@ async function toggleSkill(name, currentlyEnabled) {
 // the Skills view shows the last-viewed skill.
 let _currentSkillDetail = null; // { name, category, content }
 let _skillMode = 'empty'; // 'empty' | 'read' | 'create' | 'edit'
+
+// Starter SKILL.md template prefilled into the create form so new skills are
+// born in valid format (YAML frontmatter + markdown body). `${name}` is filled
+// from the Name field when known, else a placeholder. The frontmatter `name`
+// must match the skill's directory name for the loader to resolve it.
+function _skillTemplate(name) {
+  const n = (name && name.trim()) ? name.trim().toLowerCase().replace(/\s+/g, '-') : 'my-skill';
+  return `---
+name: ${n}
+description: One-line summary of what this skill does and when it should be used.
+---
+
+# ${n}
+
+Briefly describe what this skill is for.
+
+## When to use
+
+- Trigger or situation 1
+- Trigger or situation 2
+
+## Instructions
+
+1. First step.
+2. Second step.
+`;
+}
 let _skillPreFormDetail = null; // snapshot of previously-viewed skill when entering a form
 let _editingSkillName = null;
 
@@ -4431,7 +4465,8 @@ async function openSkill(name, el) {
   _editingSkillName = null;
   _setAgentRightMode('skill');
   try {
-    const data = await api(`/api/skills/content?name=${encodeURIComponent(name)}`);
+    const profQs = _currentSkillsProfile ? `&profile=${encodeURIComponent(_currentSkillsProfile)}` : '';
+    const data = await api(`/api/skills/content?name=${encodeURIComponent(name)}${profQs}`);
     if (data && (data.success === false || data.error)) {
       const message = data.error || t('skill_load_failed');
       _renderSkillError(name, message);
@@ -4445,7 +4480,8 @@ async function openSkill(name, el) {
 
 async function openSkillFile(skillName, filePath) {
   try {
-    const data = await api(`/api/skills/content?name=${encodeURIComponent(skillName)}&file=${encodeURIComponent(filePath)}`);
+    const profQs = _currentSkillsProfile ? `&profile=${encodeURIComponent(_currentSkillsProfile)}` : '';
+    const data = await api(`/api/skills/content?name=${encodeURIComponent(skillName)}&file=${encodeURIComponent(filePath)}${profQs}`);
     if (data && data.error) {
       _renderSkillError(skillName, data.error);
       setStatus(t('skill_file_load_failed') + data.error);
@@ -4503,7 +4539,7 @@ function openSkillCreate() {
   _editingSkillName = null;
   _skillMode = 'create';
   _setAgentRightMode('skill');
-  _renderSkillForm({ name: '', category: '', content: '', isEdit: false });
+  _renderSkillForm({ name: '', category: '', content: _skillTemplate(''), isEdit: false });
 }
 
 function _renderSkillForm({ name, category, content, isEdit }) {
@@ -4536,6 +4572,22 @@ function _renderSkillForm({ name, category, content, isEdit }) {
   body.style.display = '';
   if (empty) empty.style.display = 'none';
   _setSkillHeaderButtons(isEdit ? 'edit' : 'create');
+  if (!isEdit) {
+    // Keep the template's frontmatter name/heading in sync with the Name field,
+    // but only while the content is still the pristine template — never clobber
+    // a body the user has started editing.
+    const nameEl = $('skillFormName');
+    const contentEl = $('skillFormContent');
+    if (nameEl && contentEl) {
+      let lastName = '';
+      nameEl.addEventListener('input', () => {
+        if (contentEl.value === _skillTemplate(lastName)) {
+          contentEl.value = _skillTemplate(nameEl.value);
+        }
+        lastName = nameEl.value;
+      });
+    }
+  }
   const focusEl = isEdit ? $('skillFormCategory') : $('skillFormName');
   if (focusEl) focusEl.focus();
 }
@@ -4575,7 +4627,12 @@ async function saveSkillForm() {
   if (!name) { errEl.textContent = t('skill_name_required'); errEl.style.display = ''; return; }
   if (!content.trim()) { errEl.textContent = t('content_required'); errEl.style.display = ''; return; }
   try {
-    await api('/api/skills/save', {method:'POST', body: JSON.stringify({name, category: category||undefined, content})});
+    const saveBody = {name, category: category||undefined, content};
+    // Target the profile whose skills are currently shown (right panel), not
+    // the active profile, so creating a skill while a non-active profile is
+    // selected links it to that profile.
+    if (_currentSkillsProfile) saveBody.profile = _currentSkillsProfile;
+    await api('/api/skills/save', {method:'POST', body: JSON.stringify(saveBody)});
     showToast(_editingSkillName ? t('skill_updated') : t('skill_created'));
     _skillsData = null;
     _cronSkillsCache = null;
@@ -4614,7 +4671,9 @@ async function deleteCurrentSkill() {
   });
   if (!ok) return;
   try {
-    await api('/api/skills/delete', { method:'POST', body: JSON.stringify({ name }) });
+    const delBody = { name };
+    if (_currentSkillsProfile) delBody.profile = _currentSkillsProfile;
+    await api('/api/skills/delete', { method:'POST', body: JSON.stringify(delBody) });
     _currentSkillDetail = null;
     _skillPreFormDetail = null;
     _skillsData = null;

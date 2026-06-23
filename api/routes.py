@@ -834,10 +834,22 @@ def _skill_view_from_file(skill_dir: Path | None, skill_md: Path) -> dict:
     }
 
 
-def _skill_view_from_active_dir(name: str) -> dict:
+def _skills_dir_for_profile(profile_param: str) -> Path:
+    """Resolve the skills dir for an optional profile name (empty = active)."""
+    profile_param = (profile_param or "").strip()
+    if profile_param:
+        try:
+            from api.profiles import get_hermes_home_for_profile
+            return Path(get_hermes_home_for_profile(profile_param)) / "skills"
+        except Exception:
+            return _active_skills_dir()
+    return _active_skills_dir()
+
+
+def _skill_view_from_active_dir(name: str, profile: str = "") -> dict:
     from tools.skills_tool import skill_view as _skill_view
 
-    skills_dir = _active_skills_dir()
+    skills_dir = _skills_dir_for_profile(profile)
     search_dirs = _active_skill_search_dirs(skills_dir)
     skill_dir, skill_md = _find_skill_in_dirs(name, search_dirs)
     if not skill_md:
@@ -7810,6 +7822,7 @@ def handle_get(handler, parsed) -> bool:
         name = qs.get("name", [""])[0]
         if not name:
             return j(handler, {"error": "name required"}, status=400)
+        profile_param = qs.get("profile", [""])[0]
         file_path = qs.get("file", [""])[0]
         if file_path:
             # Serve a linked file from the skill directory
@@ -7817,7 +7830,7 @@ def handle_get(handler, parsed) -> bool:
 
             if _re.search(r"[*?\[\]]", name):
                 return bad(handler, "Invalid skill name", 400)
-            skills_dir = _active_skills_dir()
+            skills_dir = _skills_dir_for_profile(profile_param)
             skill_dir, _skill_md = _find_skill_in_dirs(
                 name, _active_skill_search_dirs(skills_dir)
             )
@@ -7834,7 +7847,7 @@ def handle_get(handler, parsed) -> bool:
                 handler,
                 {"content": target.read_text(encoding="utf-8"), "path": file_path},
             )
-        data = _skill_view_from_active_dir(name)
+        data = _skill_view_from_active_dir(name, profile_param)
         if not isinstance(data.get("linked_files"), dict):
             data["linked_files"] = {}
         return j(handler, data)
@@ -17091,7 +17104,19 @@ def _handle_skill_save(handler, body):
     category = body.get("category", "").strip()
     if category and ("/" in category or ".." in category):
         return bad(handler, "Invalid category")
-    skills_dir = _active_skills_dir()
+    # Optional profile param: create the skill in the selected (not active)
+    # profile's skills dir. Mirrors the GET /api/skills and /skills/toggle
+    # behaviour so the Agents panel "New skill" button targets whichever
+    # profile is currently shown on the right, not the active one.
+    profile_param = (body.get("profile") or "").strip()
+    if profile_param:
+        try:
+            from api.profiles import get_hermes_home_for_profile
+            skills_dir = Path(get_hermes_home_for_profile(profile_param)) / "skills"
+        except Exception:
+            skills_dir = _active_skills_dir()
+    else:
+        skills_dir = _active_skills_dir()
 
     if category:
         skill_dir = skills_dir / category / skill_name
@@ -17120,7 +17145,17 @@ def _handle_skill_delete(handler, body):
     skill_name = str(body["name"]).strip().lower().replace(" ", "-")
     if not skill_name or "/" in skill_name or ".." in skill_name:
         return bad(handler, "Invalid skill name")
-    skills_dir = _active_skills_dir()
+    # Optional profile param: delete from the selected (not active) profile's
+    # skills dir, matching _handle_skill_save / GET /api/skills.
+    profile_param = (body.get("profile") or "").strip()
+    if profile_param:
+        try:
+            from api.profiles import get_hermes_home_for_profile
+            skills_dir = Path(get_hermes_home_for_profile(profile_param)) / "skills"
+        except Exception:
+            skills_dir = _active_skills_dir()
+    else:
+        skills_dir = _active_skills_dir()
     matches = [p for p in skills_dir.rglob("SKILL.md") if p.parent.name == skill_name]
     if not matches:
         return bad(handler, "Skill not found", 404)
