@@ -1429,12 +1429,12 @@
   .clarify-card.collapsed .clarify-inner{max-height:48px;overflow:hidden;padding:10px 14px;}
   .clarify-card.collapsed .clarify-header{margin-bottom:0;}
   .clarify-card.collapsed .clarify-question,.clarify-card.collapsed .clarify-choices,.clarify-card.collapsed .clarify-response,.clarify-card.collapsed .clarify-hint{display:none;}
-  /* Left rail (desktop primary navigation) */
-  .rail{display:none;width:48px;flex-shrink:0;flex-direction:column;align-items:center;gap:4px;padding:8px 0;background:var(--sidebar);border-right:1px solid var(--border);}
-  .rail-btn{width:36px;height:36px;border-radius:8px;border:none;background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;transition:color .15s,background .15s;flex-shrink:0;padding:0;}
-  .rail-btn:hover{color:var(--text);background:var(--hover-bg);}
+  /* Bottom dock (macOS-style primary navigation) */
+  .rail{display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:200;flex-direction:row;align-items:flex-end;gap:6px;padding:10px 16px;background:color-mix(in srgb,var(--sidebar) 72%,transparent);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);border:1px solid var(--border2);border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.28),0 2px 8px rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.06) inset;width:auto;flex-shrink:0;}
+  .rail-btn{width:48px;height:48px;border-radius:12px;border:none;background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;transition:color .15s,background .15s,transform .18s cubic-bezier(.34,1.56,.64,1);flex-shrink:0;padding:0;}
+  .rail-btn:hover{color:var(--text);background:var(--hover-bg);transform:translateY(-8px) scale(1.22);}
   .rail-btn.active{color:var(--accent-text);background:var(--accent-bg);}
-.rail-btn.active::before{content:'';position:absolute;left:-6px;top:50%;transform:translateY(-50%);width:3px;height:16px;background:var(--accent);border-radius:0 2px 2px 0;}
+  .rail-btn.active::before{content:'';position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:5px;height:5px;background:var(--accent);border-radius:50%;pointer-events:none;z-index:1;}
   /* Custom tooltip — replaces native title="" for faster, more polished display.
      Native browser tooltips have a ~1.5s hover delay that reads as "no tooltip
      exists" (#1775). Our custom tooltip appears at ~150ms hover, dismisses
@@ -1461,8 +1461,11 @@
      of the trigger so it doesn't extend past the viewport edge. */
   .has-tooltip--left::after{left:auto;right:calc(100% + 8px);top:50%;transform:translateY(-50%);}
   @media(prefers-reduced-motion:reduce){.has-tooltip::after{transition:none;transition-delay:0s;}}
-.rail-spacer{flex:1;min-height:8px;}
+.rail-spacer{display:none;}
+.rail-divider{width:1px;height:28px;background:var(--border);border-radius:1px;align-self:center;flex-shrink:0;margin:0 2px;}
 .rail .nav-tab{flex:0 0 auto;padding:0;font-size:inherit;border-bottom:none;overflow:visible;}
+/* Dock tooltips appear above the icon */
+.rail .has-tooltip::after{left:50%;top:auto;bottom:calc(100% + 10px);transform:translateX(-50%);}
 /* Note: previously this block had `.rail .nav-tab:hover::after { content: none }`
    to suppress the legacy `.nav-tab:hover::after { content: attr(data-label) }`
    tooltip (line ~681 below) on the desktop rail. After v0.51.17 migrated the
@@ -1472,13 +1475,15 @@
    removes the pseudo-element entirely. Solution: scope the legacy
    `.nav-tab:hover::after` data-label tooltip to `.sidebar-nav` (mobile) only
    (see line ~681). The rail rule is no longer needed. */
-  .rail .nav-tab.active::before{content:'';position:absolute;left:-6px;top:50%;bottom:auto;transform:translateY(-50%);width:3px;height:16px;background:var(--accent);border-radius:0 2px 2px 0;}
+  /* suppress old left-rail indicator; dock uses rail-btn.active::before for the dot instead */
   .dashboard-link{position:relative;}
   .dashboard-link-visible{display:flex!important;}
   .dashboard-external-badge{position:absolute;right:5px;top:5px;width:9px;height:9px;border-radius:2px;border:1px solid var(--accent);background:var(--sidebar);box-shadow:0 0 0 2px var(--sidebar);opacity:.95;}
   .dashboard-external-badge::after{content:'';position:absolute;right:-2px;top:-2px;width:5px;height:5px;border-top:1.5px solid var(--accent);border-right:1.5px solid var(--accent);}
   .sidebar-nav .dashboard-external-badge{right:8px;top:7px;width:8px;height:8px;}
   @media(min-width:641px){.rail{display:flex;}.sidebar > .sidebar-nav{display:none;}}
+  /* Add bottom padding to layout so content isn't obscured by the dock */
+  @media(min-width:641px){.layout{padding-bottom:80px;}}
   /* Sidebar navigation tabs */
   .sidebar-nav{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;padding:6px 8px 0;gap:2px;}
   .nav-tab{flex:1;padding:10px 4px 8px;font-size:20px;text-align:center;cursor:pointer;color:var(--muted);border:none;background:none;transition:color .15s;border-bottom:2px solid transparent;white-space:nowrap;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;}
