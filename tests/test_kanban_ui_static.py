@@ -41,10 +41,14 @@ def test_kanban_has_sidebar_panel_and_main_board_mounts():
     assert 'id="kanbanAssigneeFilter"' in INDEX
     assert 'id="kanbanTenantFilter"' in INDEX
     assert 'id="kanbanIncludeArchived"' in INDEX
-    assert 'id="kanbanList"' in INDEX
+    # Left sidebar now hosts the Scheduled (cron) task list; filters moved to
+    # the board header.
+    assert 'id="kanbanScheduledList"' in INDEX
     assert '<div id="mainKanban" class="main-view">' in INDEX
     assert 'id="kanbanBoard"' in INDEX
+    # Task detail is now a popup overlay rendered into #kanbanTaskPreview.
     assert 'id="kanbanTaskPreview"' in INDEX
+    assert 'id="kanbanTaskDetailOverlay"' in INDEX
 
 
 def test_switch_panel_lazy_loads_kanban_and_toggles_main_view():
@@ -66,12 +70,12 @@ def test_kanban_task_detail_renders_read_only_sections():
     assert "function _kanbanRenderTaskDetail" in PANELS
     for payload_key in ("data.comments", "data.events", "data.links", "data.runs"):
         assert payload_key in PANELS
+    # The detail popup renders each payload section as a collapsible accordion
+    # (comments open by default) instead of a static grid of sections.
     for section_class in (
-        "kanban-detail-section",
-        "kanban-detail-comments",
-        "kanban-detail-events",
-        "kanban-detail-links",
-        "kanban-detail-runs",
+        "kanban-detail-accordion",
+        "kanban-acc",
+        "kanban-acc-body",
     ):
         assert section_class in PANELS
     assert "method: 'POST'" not in PANELS[PANELS.find("async function loadKanbanTask"):PANELS.find("function loadTodos")]
@@ -470,13 +474,16 @@ def test_kanban_run_dispatcher_button_exists_and_is_distinct_from_preview():
     # Distinct visual class so users can tell it apart from the preview button.
     assert "kanban-run-dispatch-btn" in btn_html
 
-    # 4. The sidebar bulk bar also has a Run dispatcher button alongside the
-    # existing Preview button, so users in the filter pane can also run.
-    bulk_idx = INDEX.find("kanbanBulkBar")
-    bulk_html = INDEX[bulk_idx:bulk_idx + 1500]
-    assert 'onclick="runKanbanDispatcher()"' in bulk_html, (
-        "Sidebar bulk bar must also expose Run dispatcher."
-    )
+    # 4. The board header (main-view-actions) carries BOTH the Run and Preview
+    # dispatcher buttons. The redesign deliberately does NOT duplicate them in
+    # the bulk bar — preview/run live only on top.
+    assert 'id="btnKanbanPreviewDispatcher"' in INDEX
+    prev_idx = INDEX.find('id="btnKanbanPreviewDispatcher"')
+    prev_start = INDEX.rfind('<button', 0, prev_idx)
+    prev_end = INDEX.find('</button>', prev_idx) + len('</button>')
+    prev_html = INDEX[prev_start:prev_end]
+    assert 'onclick="nudgeKanbanDispatcher()"' in prev_html
+    assert "kanban-nudge-dispatch-btn" in prev_html
     # The dispatch result formatter exists and surfaces concrete numbers.
     assert "function _kanbanFormatDispatchResult" in PANELS
     fmt_match = re.search(
@@ -789,12 +796,13 @@ def test_kanban_ui_parity_polish_css_and_i18n_exist():
 
 def test_kanban_review_feedback_static_ui_fixes_exist():
     assert "function closeKanbanTaskDetail" in PANELS
-    assert "kanban-back-btn" in PANELS
+    # Detail popup closes via the header close button (was a "back to board" btn).
+    assert "kanban-detail-close" in PANELS
     assert "function _kanbanFormatTimestamp" in PANELS
     assert "function _kanbanEventSummary" in PANELS
     assert "data.log || {}" in PANELS
-    assert ".kanban-task-preview-header" in STYLE
-    assert ".kanban-back-btn" in STYLE
+    assert ".kanban-detail-head" in STYLE
+    assert ".kanban-detail-close" in STYLE
     assert "@media (max-width: 640px)" in STYLE
     assert "scroll-snap-type" in STYLE
     assert "kanban-stats-grid" in PANELS
@@ -843,8 +851,8 @@ console.log(JSON.stringify({html}));
     result = subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
     html = json.loads(result.stdout)["html"]
     assert "worker log" in html
-    assert "kanban-back-btn" in html
-    assert "Back to board" in html
+    assert "kanban-detail-close" in html
+    assert "kanban-status-select" in html
     assert "1777931496" not in html
     assert "waiting" in html
     assert "ReferenceError" not in html

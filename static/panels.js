@@ -270,6 +270,8 @@ async function switchPanel(name, opts = {}) {
   // so we don't keep a stale connection open in the background.
   if (prevPanel === 'kanban' && nextPanel !== 'kanban') {
     if (typeof _kanbanStopPolling === 'function') _kanbanStopPolling();
+    // Drop the kanban-only auto-collapse so other panels render at full width.
+    document.querySelector('.layout')?.classList.remove('kanban-no-scheduled');
   }
   // The right (session) panel is chat-only: leaving chat force-closes it
   // (remembering whatever mode it was in), returning to chat restores it.
@@ -1531,23 +1533,6 @@ function _kanbanVisibleTasks(){
   });
 }
 
-function _kanbanRenderSidebar(columns){
-  const list = $('kanbanList');
-  if (!list) return;
-  const tasks = columns.flatMap(col => (col.tasks || []).map(task => ({...task, status: task.status || col.name})));
-  if (!tasks.length) {
-    list.innerHTML = `<div class="kanban-empty" data-i18n="kanban_no_matching_tasks">${esc(t('kanban_no_matching_tasks'))}</div>`;
-    return;
-  }
-  list.innerHTML = tasks.map(task => {
-    const meta = _kanbanTaskMeta(task);
-    return `<button class="kanban-list-item" onclick="loadKanbanTask('${esc(task.id)}')">
-      <span class="kanban-list-status">${esc(_kanbanColumnLabel(task.status))}</span>
-      <span class="kanban-list-title">${esc(_kanbanTaskTitle(task))}</span>
-      ${meta.length ? `<span class="kanban-meta">${esc(meta.join(' · '))}</span>` : ''}
-    </button>`;
-  }).join('');
-}
 
 
 /**
@@ -1884,46 +1869,50 @@ function _kanbanScheduledCard(job){
     </article>`;
 }
 
-function _kanbanScheduledColumnHtml(){
-  const jobs = _kanbanScheduledJobs || [];
-  const cards = jobs.length
-    ? jobs.map(_kanbanScheduledCard).join('')
-    : `<div class="kanban-empty">${esc(t('kanban_no_scheduled') || 'No scheduled tasks')}</div>`;
-  return `<section class="kanban-column kanban-column-scheduled" data-status="scheduled">
-      <div class="kanban-column-head">
-        <span>${esc(t('kanban_status_scheduled') || 'Scheduled')}</span>
-        <span class="kanban-count">${jobs.length}</span>
-      </div>
-      <div class="kanban-column-body">${cards}</div>
-    </section>`;
-}
-
 async function openScheduledFromBoard(id){
   if (!id) return;
   if (typeof switchPanel === 'function') await switchPanel('tasks');
   if (typeof openCronDetail === 'function') openCronDetail(id);
 }
 
+// Render the Scheduled (cron) jobs into the Board's left sidebar. The board
+// itself no longer carries a Scheduled column — scheduled work lives here.
+function _kanbanRenderScheduledSidebar(){
+  const list = $('kanbanScheduledList');
+  if (!list) return;
+  const jobs = _kanbanScheduledJobs || [];
+  list.innerHTML = jobs.length
+    ? jobs.map(_kanbanScheduledCard).join('')
+    : `<div class="kanban-empty">${esc(t('kanban_no_scheduled') || 'No scheduled tasks')}</div>`;
+  // With nothing scheduled the left pane has no content worth showing — collapse
+  // it (kanban-only, independent of the user's global sidebar toggle) so the
+  // board gets full width. Re-expands automatically once a job appears.
+  _kanbanSyncSidebarCollapse(jobs.length === 0);
+}
+
+function _kanbanSyncSidebarCollapse(noScheduled){
+  const layout = document.querySelector('.layout');
+  if (!layout) return;
+  layout.classList.toggle('kanban-no-scheduled', _currentPanel === 'kanban' && !!noScheduled);
+}
+
 function _kanbanRenderBoard(){
   const board = $('kanbanBoard');
   if (!board) return;
-  // The Scheduled lane (crons) is always rendered first, independent of the
-  // kanban task store, so scheduled work is visible even on an empty board.
-  const scheduledHtml = _kanbanScheduledColumnHtml();
+  _kanbanRenderScheduledSidebar();
   if (!_kanbanBoard || !_kanbanBoard.columns) {
-    board.innerHTML = scheduledHtml + _kanbanEmptyBoardHtml();
+    board.innerHTML = _kanbanEmptyBoardHtml();
     return;
   }
   const columns = _kanbanVisibleTasks();
   const total = columns.reduce((n, col) => n + (col.tasks || []).length, 0);
   if ($('kanbanSummary')) $('kanbanSummary').textContent = String(t('kanban_visible_tasks')).replace('{0}', total);
-  _kanbanRenderSidebar(columns);
   if (total === 0) {
-    board.innerHTML = scheduledHtml + _kanbanEmptyBoardHtml();
+    board.innerHTML = _kanbanEmptyBoardHtml();
     return;
   }
   const colsHtml = _kanbanLanesByProfile ? _kanbanRenderProfileLanes(columns) : columns.map(_kanbanRenderColumn).join('');
-  board.innerHTML = scheduledHtml + colsHtml;
+  board.innerHTML = colsHtml;
 }
 
 function _kanbanCard(task, status){
@@ -2289,11 +2278,11 @@ async function unblockKanbanTask(taskId){
 
 function closeKanbanTaskDetail(){
   _kanbanCurrentTaskId = null;
+  const overlay = $('kanbanTaskDetailOverlay');
+  if (overlay) overlay.hidden = true;
+  document.removeEventListener('keydown', _kanbanDetailKey);
   const preview = $('kanbanTaskPreview');
-  if (preview) {
-    preview.style.display = 'none';
-    preview.innerHTML = '';
-  }
+  if (preview) preview.innerHTML = '';
   const board = $('kanbanBoard');
   if (board) board.querySelectorAll('.kanban-card').forEach(card => card.classList.remove('selected'));
 }
@@ -2334,13 +2323,6 @@ function _kanbanFormatDetailValue(value){
   return String(value);
 }
 
-function _kanbanDetailSection(cls, title, inner, emptyKey){
-  const content = inner || `<div class="kanban-detail-empty">${esc(t(emptyKey))}</div>`;
-  return `<section class="kanban-detail-section ${cls}">
-    <h3>${esc(title)}</h3>
-    ${content}
-  </section>`;
-}
 
 function _kanbanCommentHtml(comment){
   const body = comment.body || comment.text || comment.content || '';
@@ -3081,6 +3063,25 @@ async function addKanbanComment(taskId){
   } catch(e) { showToast(t('kanban_unavailable') + ': ' + (e.message || e), 'error'); }
 }
 
+// Accordion section for the task-detail popup. Each section expands to a fixed,
+// scrollable height (see .kanban-acc-body in CSS). `open` controls the default
+// expanded state — comments are opened by default.
+function _kanbanAccordion(titleText, inner, emptyKey, open){
+  const content = inner || `<div class="kanban-detail-empty">${esc(t(emptyKey))}</div>`;
+  return `<details class="kanban-acc"${open ? ' open' : ''}>
+    <summary class="kanban-acc-summary"><span>${esc(titleText)}</span><svg class="kanban-acc-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+    <div class="kanban-acc-body">${content}</div>
+  </details>`;
+}
+
+function _kanbanStatusSelectChange(taskId, status){
+  if (!taskId || !status) return;
+  // 'running' is owned by the dispatcher; it is never offered in this dropdown.
+  // 'blocked' goes through the dedicated /block endpoint (records a reason).
+  if (status === 'blocked') { blockKanbanTask(taskId); return; }
+  updateKanbanTask(taskId, {status});
+}
+
 function _kanbanRenderTaskDetail(data){
   const task = data.task || {};
   const log = data.log || {};
@@ -3094,29 +3095,42 @@ function _kanbanRenderTaskDetail(data){
   // Note: 'running' is intentionally absent — entering 'running' is the
   // dispatcher/claim_task path's responsibility, not a user UI write. The
   // bridge rejects PATCH status='running' with HTTP 400 to match the agent
-  // dashboard plugin's contract. UI users want to claim/promote a ready task
-  // via the dispatcher Nudge button, not flip it to running by hand.
-  const statusButtons = ['triage', 'todo', 'ready', 'blocked', 'done', 'archived'].map(status =>
-    `<button class="btn secondary" onclick="updateKanbanTask('${esc(task.id)}',{status:'${status}'})">${esc(_kanbanColumnLabel(status))}</button>`
-  ).join('') + `<button class="btn secondary" onclick="blockKanbanTask('${esc(task.id)}')">${esc(t('kanban_block'))}</button><button class="btn secondary" onclick="unblockKanbanTask('${esc(task.id)}')">${esc(t('kanban_unblock'))}</button>`;
-  return `<div class="kanban-task-preview-header">
-      <button class="btn secondary kanban-back-btn" onclick="closeKanbanTaskDetail()">${esc(t('kanban_back_to_board'))}</button>
-      <div class="kanban-task-preview-title">${esc(title)}</div>
-      <button class="btn secondary kanban-edit-btn" onclick="openKanbanEdit('${esc(task.id)}')" data-i18n="kanban_edit_task" title="${esc(t('kanban_edit_task') || 'Edit task')}">${esc(t('kanban_edit_task') || 'Edit task')}</button>
+  // dashboard plugin's contract.
+  const curStatus = task.status || 'triage';
+  const statusOpts = ['triage', 'todo', 'ready', 'blocked', 'done', 'archived'];
+  // If the task is in a dispatcher-owned state (e.g. running) keep it visible as
+  // the current selection so the dropdown text reflects reality.
+  if (!statusOpts.includes(curStatus)) statusOpts.unshift(curStatus);
+  const statusOptions = statusOpts.map(s =>
+    `<option value="${esc(s)}"${s === curStatus ? ' selected' : ''}>${esc(_kanbanColumnLabel(s))}</option>`
+  ).join('');
+
+  const commentsBody = (comments.length
+      ? comments.map(_kanbanCommentHtml).join('')
+      : `<div class="kanban-detail-empty">${esc(t('kanban_no_comments'))}</div>`)
+    + `<div class="kanban-comment-form">
+        <textarea id="kanbanCommentInput" rows="2" placeholder="${esc(t('kanban_add_comment'))}"></textarea>
+        <button class="btn primary" onclick="addKanbanComment('${esc(task.id)}')">${esc(t('kanban_add_comment'))}</button>
+      </div>`;
+
+  return `<div class="kanban-detail-head">
+      <div class="kanban-detail-head-main">
+        <div class="kanban-task-preview-title" id="kanbanTaskDetailTitle">${esc(title)}</div>
+        ${meta.length ? `<div class="kanban-meta">${esc(meta.join(' · '))}</div>` : ''}
+      </div>
+      <div class="kanban-detail-head-actions">
+        <select class="kanban-status-select" aria-label="${esc(t('kanban_change_status') || 'Change status')}" onchange="_kanbanStatusSelectChange('${esc(task.id)}', this.value)">${statusOptions}</select>
+        <button class="btn secondary kanban-edit-btn" onclick="openKanbanEdit('${esc(task.id)}')" title="${esc(t('kanban_edit_task') || 'Edit task')}">${esc(t('kanban_edit_task') || 'Edit task')}</button>
+        <button type="button" class="kanban-detail-close" aria-label="${esc(t('close') || 'Close')}" onclick="closeKanbanTaskDetail()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
     </div>
-    <div class="kanban-task-preview-body">${_kanbanRenderMarkdown(body)}</div>
-    ${meta.length ? `<div class="kanban-meta">${esc(meta.join(' · '))}</div>` : ''}
-    <div class="kanban-status-actions">${statusButtons}</div>
-    <div class="kanban-detail-grid">
-      ${_kanbanDetailSection('kanban-detail-comments', String(t('kanban_comments_count')).replace('{0}', comments.length), comments.map(_kanbanCommentHtml).join(''), 'kanban_no_comments')}
-      ${_kanbanDetailSection('kanban-detail-events', String(t('kanban_events_count')).replace('{0}', events.length), events.map(_kanbanEventHtml).join(''), 'kanban_no_events')}
-      ${_kanbanDetailSection('kanban-detail-links', t('kanban_links'), _kanbanLinksHtml(links), 'kanban_empty')}
-      ${_kanbanDetailSection('kanban-detail-runs', String(t('kanban_runs_count')).replace('{0}', runs.length), runs.map(_kanbanRunHtml).join(''), 'kanban_no_runs')}
-      ${_kanbanDetailSection('kanban-detail-log', t('kanban_worker_log'), log.content ? `<pre class="kanban-detail-pre">${esc(log.content)}</pre>` : '', 'kanban_empty')}
-    </div>
-    <div class="kanban-comment-form">
-      <textarea id="kanbanCommentInput" rows="2" placeholder="${esc(t('kanban_add_comment'))}"></textarea>
-      <button class="btn primary" onclick="addKanbanComment('${esc(task.id)}')">${esc(t('kanban_add_comment'))}</button>
+    <div class="kanban-detail-description">${_kanbanRenderMarkdown(body)}</div>
+    <div class="kanban-detail-accordion">
+      ${_kanbanAccordion(String(t('kanban_comments_count')).replace('{0}', comments.length), commentsBody, 'kanban_no_comments', true)}
+      ${_kanbanAccordion(String(t('kanban_events_count')).replace('{0}', events.length), events.map(_kanbanEventHtml).join(''), 'kanban_no_events', false)}
+      ${_kanbanAccordion(t('kanban_links'), _kanbanLinksHtml(links), 'kanban_empty', false)}
+      ${_kanbanAccordion(String(t('kanban_runs_count')).replace('{0}', runs.length), runs.map(_kanbanRunHtml).join(''), 'kanban_no_runs', false)}
+      ${_kanbanAccordion(t('kanban_worker_log'), log.content ? `<pre class="kanban-detail-pre">${esc(log.content)}</pre>` : '', 'kanban_empty', false)}
     </div>`;
 }
 
@@ -3134,12 +3148,17 @@ async function loadKanbanTask(taskId){
       Array.from(board.querySelectorAll('.kanban-card')).find(card => card.dataset.kanbanTaskId === taskId)?.classList.add('selected');
     }
     const preview = $('kanbanTaskPreview');
-    if (preview) {
-      preview.style.display = '';
-      preview.innerHTML = _kanbanRenderTaskDetail(data);
+    if (preview) preview.innerHTML = _kanbanRenderTaskDetail(data);
+    const overlay = $('kanbanTaskDetailOverlay');
+    if (overlay && overlay.hidden) {
+      overlay.hidden = false;
+      document.addEventListener('keydown', _kanbanDetailKey);
     }
-    showToast(`${t('kanban_task')}: ${title}`);
   } catch(e) { showToast(t('kanban_unavailable') + ': ' + (e.message || e), 'error'); }
+}
+
+function _kanbanDetailKey(e){
+  if (e.key === 'Escape') closeKanbanTaskDetail();
 }
 
 // Phase 2: Single-source-of-truth render.
